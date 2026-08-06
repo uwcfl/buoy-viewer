@@ -78,18 +78,46 @@ function parseFile(text) {
 
 async function loadDay(d) {
   const key = dateStr(d);
-  if (state.cache.has(key)) return state.cache.get(key);
-  try {
-    const resp = await fetch(`${FILE_PREFIX}${key}.csv`);
-    if (!resp.ok) { state.cache.set(key, "missing"); return "missing"; }
-    const text = await resp.text();
-    const parsed = parseFile(text);
-    state.cache.set(key, parsed);
-    return parsed;
-  } catch (e) {
-    state.cache.set(key, "missing");
-    return "missing";
+
+  // Layer 1: In-Memory Check (Handles instant lookup & active in-flight requests)
+  if (state.cache.has(key)) {
+    return state.cache.get(key);
   }
+
+  // Store the active Promise immediately to prevent duplicate requests if called concurrently
+  const loadPromise = (async () => {
+    try {
+      const url = `${FILE_PREFIX}${key}.csv`;
+      const webCache = await caches.open("buoy-data-cache");
+
+      // Layer 2: Persistent Browser Cache Check
+      let resp = await webCache.match(url);
+      if (!resp) {
+        resp = await fetch(url);
+        if (resp.ok) {
+          // Store a copy in the browser cache for future reloads
+          webCache.put(url, resp.clone());
+        }
+      }
+
+      if (!resp || !resp.ok) {
+        return "missing";
+      }
+
+      const text = await resp.text();
+      return parseFile(text);
+    } catch (e) {
+      return "missing";
+    }
+  })();
+
+  // Track the pending promise in memory
+  state.cache.set(key, loadPromise);
+
+  // Once resolved, replace the promise with the final parsed result
+  const result = await loadPromise;
+  state.cache.set(key, result);
+  return result;
 }
 
 // ensure every day in [start,end] is loaded (or known missing); returns merged records
