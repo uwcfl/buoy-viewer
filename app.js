@@ -4,7 +4,7 @@ const DEPTHS = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 
 const WT_KEYS = DEPTHS.map((d, i) => `wt${i + 1}`); // maps to watertemp(1..23)
 // const FILE_PREFIX = "data/mendota_buoy_limnodata.";
 const FILE_PREFIX = "https://mendota-buoy-proxy.sam-r-blackburn.workers.dev/mendota_buoy_limnodata.";
-const EARLIEST = new Date(new Date().getFullYear(), 3, 1); // Apr 1 current year
+const EARLIEST = new Date(new Date().getFullYear(), 3, 1); // Mar 1 current year
 
 // single-series plots: key -> {label, unit}
 const SIMPLE_VARS = {
@@ -33,6 +33,22 @@ const GROUPS = [
 ];
 
 const COL_INDEX = {}; // header name -> row index, filled on first file load
+
+/* ---------- Buoy Image Styling ---------- */
+
+const wrap = document.getElementById('buoyWrap');
+const img = document.getElementById('buoyImg');
+
+function sizeBuoyWrap() {
+  if (img.naturalWidth && img.naturalHeight) {
+    const ratio = img.naturalWidth / img.naturalHeight;
+    wrap.style.width = `${wrap.offsetHeight * ratio}px`;
+  }
+}
+
+img.addEventListener('load', sizeBuoyWrap);
+window.addEventListener('resize', sizeBuoyWrap);
+if (img.complete) sizeBuoyWrap();
 
 /* ---------- State ---------- */
 
@@ -896,7 +912,7 @@ function renderPAR(group, records, binned) {
   const y = d3.scaleLinear().domain(allVals.length ? [0, d3.max(allVals)] : [0, 1]).nice()
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
-  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text("\u00b5mol m\u207b\u00b2 s\u207b\u00b9  \u2014 orange = above water, teal = below water");
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text("\u00b5mol m\u207b\u00b2 s\u207b\u00b9  \u2014 red = above water, blue = below water");
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
   keys.forEach(s => {

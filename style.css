@@ -28,8 +28,8 @@ header#controls {
   color: #eef5f5;
   padding: 10px 18px 14px;
   display: flex;
+  align-items: stretch;
   gap: 18px;
-  align-items: center;
 }
 
 .header-main {
@@ -65,14 +65,21 @@ header#controls {
   text-align: left;
 }
 
-.buoy-logo {
-  max-height: 100%;
-  width: auto;
-  max-width: 120px;
-  object-fit: cover;
-  border-radius: 8px;
+.buoy-logo-wrap {
+  position: relative;
+  /* no height set — align-items: stretch on the flex parent handles this */
   flex-shrink: 0;
-  align-self: stretch;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.buoy-logo {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  /* now safe: wrapper's ratio will match the image's, so no crop/letterbox */
 }
 
 .title-row {
@@ -127,7 +134,7 @@ header#controls {
 }
 
 .bin-note {
-  margin-left: auto;
+  margin-left: 10px;
   font-style: italic;
   color: #9fc8d6;
   font-size: 0.76rem;
