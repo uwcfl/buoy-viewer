@@ -2,7 +2,6 @@
 
 const DEPTHS = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 const WT_KEYS = DEPTHS.map((d, i) => `wt${i + 1}`); // maps to watertemp(1..23)
-// const FILE_PREFIX = "data/mendota_buoy_limnodata.";
 const FILE_PREFIX = "https://mendota-buoy-proxy.sam-r-blackburn.workers.dev/mendota_buoy_limnodata.";
 const EARLIEST = new Date(new Date().getFullYear(), 3, 1); // Mar 1 current year
 
@@ -64,7 +63,28 @@ const state = {
   droppedDays: new Set(), // dateStr of days identified as following a 3+ day gap; persists once found
 };
 
-const today = new Date();
+// Data files store TIMESTAMP in UTC; the app displays everything in Central time (CDT/CST).
+// This converts a true UTC instant into a Date object whose LOCAL getters (getHours, getDate, etc.)
+// return Chicago wall-clock time, regardless of the viewer's own browser timezone. d3's time scales
+// and timeFormat read those local getters, so once timestamps are converted at parse time, every
+// downstream axis/tooltip/bin boundary is already in Central time with no further changes needed.
+const chicagoParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Chicago",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  hour12: false,
+});
+function toChicago(utcDate) {
+  const parts = {};
+  for (const p of chicagoParts.formatToParts(utcDate)) parts[p.type] = p.value;
+  const hour = parts.hour === "24" ? "00" : parts.hour; // some engines report midnight as 24
+  return new Date(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(hour), Number(parts.minute), Number(parts.second)
+  );
+}
+
+const today = toChicago(new Date());
 today.setHours(23, 59, 59, 999);
 
 /* ---------- Data loading ---------- */
@@ -82,7 +102,8 @@ function parseFile(text) {
   const data = rows.slice(4).filter(r => r.length > 1 && r[0]);
   const num = v => { const f = parseFloat(v); return (v === undefined || v === "NAN" || isNaN(f)) ? null : f; };
   return data.map(r => {
-    const rec = { timestamp: new Date(r[0].replace(" ", "T")) };
+    // raw timestamp string is UTC (no offset in source); parse as UTC via "Z", then convert to Central
+    const rec = { timestamp: toChicago(new Date(r[0].replace(" ", "T") + "Z")) };
     WT_KEYS.forEach((k, i) => rec[k] = num(r[COL_INDEX[`watertemp(${i + 1})`]]));
     for (const k of ["airTL", "rhL", "wsL", "wdL", "IRTL", "pco2ppm_Avg", "PAR_above_Avg",
       "PAR_below_Avg", "pco2volt_Avg", "waterT", "spCond", "pH", "do_raw",
@@ -644,7 +665,7 @@ function renderProfileHeatmap(div, group, records, binned) {
     .style("height", "10px")
     .style("width", "140px")
     .style("border-radius", "3px")
-    .style("background", "linear-gradient(to right, #14708c, #c23d36)");
+    .style("background", "linear-gradient(to right, #14708c, #d97a3c)");
 
   legendDiv.append("span").text(`${maxTemp.toFixed(1)}\u00b0C`);
 
@@ -653,7 +674,7 @@ function renderProfileHeatmap(div, group, records, binned) {
 
   const colorScale = d3.scaleLinear()
     .domain([minTemp, maxTemp])
-    .range(["#14708c", "#c23d36"])
+    .range(["#14708c", "#d97a3c"])
     .interpolate(d3.interpolateRgb);
 
   const { svg, width } = makeSvg(wrapper, height);
@@ -921,14 +942,14 @@ function renderPAR(group, records, binned) {
   const height = 160;
   const { svg, width, clipId } = makeSvg(div, height);
   const x = xScaleFor(width);
-  const keys = [{ k: "PAR_above_Avg", label: "Above water", color: "#c23d36" },
+  const keys = [{ k: "PAR_above_Avg", label: "Above water", color: "#d97a3c" },
   { k: "PAR_below_Avg", label: "Below water", color: "#14708c" }];
   let allVals = [];
   binned.forEach(d => keys.forEach(s => { if (d[s.k] != null) allVals.push(d[s.k]); }));
   const y = d3.scaleLinear().domain(allVals.length ? [0, d3.max(allVals)] : [0, 1]).nice()
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
-  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text("\u00b5mol m\u207b\u00b2 s\u207b\u00b9  \u2014 red = above water, blue = below water");
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text("\u00b5mol m\u207b\u00b2 s\u207b\u00b9  \u2014 orange = above water, blue = below water");
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
   keys.forEach(s => {
@@ -1011,7 +1032,7 @@ function renderWind(group, records, binned, mins) {
   plotArea.selectAll(".wind-arrow").data(arrowPts).enter().append("path")
     .attr("class", "wind-arrow")
     .attr("d", "M0,-7 L0,7 M0,-7 L-4,-2 M0,-7 L4,-2")
-    .attr("stroke", "#c23d36").attr("stroke-width", 1.6).attr("fill", "none")
+    .attr("stroke", "#d97a3c").attr("stroke-width", 1.6).attr("fill", "none")
     .attr("transform", d => `translate(${x(d.time)},${y(d.wsL)}) rotate(${(d.wdL + 180) % 360})`);
 
   div.node()._updateX = () => {
@@ -1028,7 +1049,7 @@ function renderWind(group, records, binned, mins) {
     {
       key: "wdL",
       label: "Wind direction (towards)",
-      color: "#c23d36",
+      color: "#d97a3c",
       formatter: (v) => {
         const towards = (v + 180) % 360;
         return `${towards.toFixed(0)}\u00b0 (${getCompassDirection(towards)})`;
