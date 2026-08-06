@@ -42,7 +42,7 @@ const state = {
     "pco2ppm_Avg", "spCond", "pH", "chlorYSI", "phycoYSI", "turbid", "fdom"]),
   depthOn: new Set(WT_KEYS),
   doUnit: "sat", // 'sat' | 'raw'
-  wtProfileMode: "lines", // 'lines' | 'heatmap'
+  wtProfileMode: "heatmap", // 'lines' | 'heatmap'
   cache: new Map(),  // dateStr -> array of records, or 'missing'
   allNaCols: new Set(), // discovered lazily, hidden regardless of toggle unless user forces
 };
@@ -241,7 +241,8 @@ function xScaleFor(width) {
 function panel(group) {
   const div = chartsEl.append("div").attr("class", "chart-panel").attr("id", `panel-${group.key}`);
   const top = div.append("div").attr("class", "chart-title-row");
-  top.append("div").attr("class", "chart-title").text(group.label);
+  const titleGroup = top.append("div").attr("class", "chart-title-group").style("display", "flex").style("align-items", "baseline").style("gap", "8px");
+  titleGroup.append("div").attr("class", "chart-title").text(group.label);
   return div;
 }
 
@@ -497,7 +498,7 @@ function renderSimple(group, records, binned) {
     .domain(vals.length ? [d3.min(vals), d3.max(vals)] : [0, 1]).nice()
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
-  div.append("div").attr("class", "chart-sub").text(`${group.unit || ""}`.trim());
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text(`${group.unit || ""}`.trim());
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
   const line = d3.line().defined(d => d[group.vkey] != null)
@@ -564,7 +565,7 @@ function renderProfileLines(div, group, records, binned) {
   const y = d3.scaleLinear().domain(allVals.length ? [d3.min(allVals), d3.max(allVals)] : [0, 30]).nice()
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
-  div.append("div").attr("class", "chart-sub").text("\u00b0C \u2014 color = depth (light blue = shallow, deep blue = deep)");
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text("\u00b0C \u2014 color = depth (light blue = shallow, deep blue = deep)");
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
   const seriesInfo = [];
@@ -611,7 +612,7 @@ function renderProfileHeatmap(div, group, records, binned) {
     .style("height", "10px")
     .style("width", "140px")
     .style("border-radius", "3px")
-    .style("background", "linear-gradient(to right, #14708c, #d97a3c)");
+    .style("background", "linear-gradient(to right, #14708c, #c23d36)");
 
   legendDiv.append("span").text(`${maxTemp.toFixed(1)}\u00b0C`);
 
@@ -620,7 +621,7 @@ function renderProfileHeatmap(div, group, records, binned) {
 
   const colorScale = d3.scaleLinear()
     .domain([minTemp, maxTemp])
-    .range(["#14708c", "#d97a3c"])
+    .range(["#14708c", "#c23d36"])
     .interpolate(d3.interpolateRgb);
 
   const { svg, width } = makeSvg(wrapper, height);
@@ -656,7 +657,7 @@ function renderProfileHeatmap(div, group, records, binned) {
     .attr("transform", `translate(${MARGIN.left},0)`)
     .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d}m`));
 
-  div.append("div").attr("class", "chart-sub")
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub")
     .text("Temperatures are interpolated between sensors.");
 
   const T = binned.length;
@@ -867,7 +868,7 @@ function renderDO(group, records, binned) {
   const y = d3.scaleLinear().domain(vals.length ? [d3.min(vals), d3.max(vals)] : [0, 1]).nice()
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
-  div.append("div").attr("class", "chart-sub").text(unit);
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text(unit);
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
   const line = d3.line().defined(d => d[key] != null).x(d => x(d.time)).y(d => y(d[key]));
@@ -888,14 +889,14 @@ function renderPAR(group, records, binned) {
   const height = 160;
   const { svg, width, clipId } = makeSvg(div, height);
   const x = xScaleFor(width);
-  const keys = [{ k: "PAR_above_Avg", label: "Above water", color: "#d97a3c" },
+  const keys = [{ k: "PAR_above_Avg", label: "Above water", color: "#c23d36" },
   { k: "PAR_below_Avg", label: "Below water", color: "#14708c" }];
   let allVals = [];
   binned.forEach(d => keys.forEach(s => { if (d[s.k] != null) allVals.push(d[s.k]); }));
   const y = d3.scaleLinear().domain(allVals.length ? [0, d3.max(allVals)] : [0, 1]).nice()
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
-  div.append("div").attr("class", "chart-sub").text("\u00b5mol m\u207b\u00b2 s\u207b\u00b9  \u2014 orange = above water, teal = below water");
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub").text("\u00b5mol m\u207b\u00b2 s\u207b\u00b9  \u2014 orange = above water, teal = below water");
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
   keys.forEach(s => {
@@ -968,7 +969,7 @@ function renderWind(group, records, binned, mins) {
   const arrowSpacingText = step > 1 ? ` (${formatInterval(arrowIntervalMins)} average)` : "";
 
   // Subtitle showing both data averaging period and arrow sampling spacing
-  div.append("div").attr("class", "chart-sub")
+  div.select(".chart-title-group").append("div").attr("class", "chart-sub")
     .text(`m/s \u2014 arrows show direction wind is blowing toward${arrowSpacingText}`);
 
   const plotArea = svg.append("g").attr("clip-path", `url(#${clipId})`);
@@ -978,7 +979,7 @@ function renderWind(group, records, binned, mins) {
   plotArea.selectAll(".wind-arrow").data(arrowPts).enter().append("path")
     .attr("class", "wind-arrow")
     .attr("d", "M0,-7 L0,7 M0,-7 L-4,-2 M0,-7 L4,-2")
-    .attr("stroke", "#d97a3c").attr("stroke-width", 1.6).attr("fill", "none")
+    .attr("stroke", "#c23d36").attr("stroke-width", 1.6).attr("fill", "none")
     .attr("transform", d => `translate(${x(d.time)},${y(d.wsL)}) rotate(${(d.wdL + 180) % 360})`);
 
   div.node()._updateX = () => {
@@ -995,7 +996,7 @@ function renderWind(group, records, binned, mins) {
     {
       key: "wdL",
       label: "Wind direction (towards)",
-      color: "#d97a3c",
+      color: "#c23d36",
       formatter: (v) => {
         const towards = (v + 180) % 360;
         return `${towards.toFixed(0)}\u00b0 (${getCompassDirection(towards)})`;
@@ -1010,6 +1011,8 @@ function renderWind(group, records, binned, mins) {
 function buildToggles() {
   const wrap = document.getElementById("varToggles");
   wrap.innerHTML = "";
+
+  // Individual Variable Buttons
   GROUPS.forEach(g => {
     const isVisible = state.visible.has(g.key);
     const btn = document.createElement("button");
@@ -1028,6 +1031,23 @@ function buildToggles() {
 
     wrap.appendChild(btn);
   });
+
+  // Show / Hide All Button
+  const allVisible = GROUPS.every(g => state.visible.has(g.key));
+  const toggleAllBtn = document.createElement("button");
+  toggleAllBtn.type = "button";
+  toggleAllBtn.textContent = allVisible ? "Hide All" : "Show All";
+  toggleAllBtn.style.fontWeight = "bold";
+
+  toggleAllBtn.addEventListener("click", () => {
+    if (allVisible) {
+      state.visible.clear();
+    } else {
+      GROUPS.forEach(g => state.visible.add(g.key));
+    }
+    render();
+  });
+  wrap.appendChild(toggleAllBtn);
 }
 
 /* ---------- Main render ---------- */

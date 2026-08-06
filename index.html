@@ -11,27 +11,38 @@
 
 <body>
   <header id="controls">
-    <div class="title-row">
-      <h1>Lake Mendota Buoy</h1>
-      <span id="loadStatus" class="status"></span>
-    </div>
-
-    <div class="range-row">
-      <label>Range:
-        <input type="date" id="startDate">
-        &ndash;
-        <input type="date" id="endDate">
-      </label>
-      <div class="presets">
-        <button data-days="7">7d</button>
-        <button data-days="30">30d</button>
-        <button data-days="90">90d</button>
-        <button data-days="all">All</button>
+    <div class="header-main">
+      <div class="header-top">
+        <div class="title-row">
+          <img src="assets/CFL-Logo.png" alt="Center for Limnology Logo" class="cfl-logo">
+          <h1>Lake Mendota Buoy</h1>
+          <span id="loadStatus" class="status"></span>
+        </div>
+        <p class="header-buoy-info">
+          Operated by the UW-Madison's Center for Limnology, David Buoy records water quality measurements every minute
+          on Lake Mendota. Below are real-time data from the middle of the lake. Data are not quality controlled.
+        </p>
       </div>
-      <span id="binNote" class="bin-note"></span>
+
+      <div class="range-row">
+        <label>Range:
+          <input type="date" id="startDate">
+          &ndash;
+          <input type="date" id="endDate">
+        </label>
+        <div class="presets">
+          <button data-days="7">7d</button>
+          <button data-days="30">30d</button>
+          <button data-days="90">90d</button>
+          <button data-days="all">All</button>
+        </div>
+        <span id="binNote" class="bin-note"></span>
+      </div>
+
+      <div class="varToggles" id="varToggles"></div>
     </div>
 
-    <div class="varToggles" id="varToggles"></div>
+    <img src="assets/buoy.png" alt="David Buoy" class="buoy-logo">
   </header>
 
   <main id="charts"></main>

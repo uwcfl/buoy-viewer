@@ -5,7 +5,7 @@
   --panel: #ffffff;
   --ink: #12242a;
   --muted: #5c7680;
-  --accent: #d97a3c;
+  --accent: #c23d36;
   --line: #d7e3e3;
   font-family: "Helvetica Neue", Arial, sans-serif;
 }
@@ -27,18 +27,64 @@ header#controls {
   background: var(--deep);
   color: #eef5f5;
   padding: 10px 18px 14px;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.header-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cfl-logo {
+  height: 28px;
+  width: auto;
+  background-color: #ffffff;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.header-buoy-info {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #cfe8ee;
+  line-height: 1.35;
+  max-width: 33vw;
+  text-align: left;
+}
+
+.buoy-logo {
+  max-height: 100%;
+  width: auto;
+  max-width: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  align-self: stretch;
 }
 
 .title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
 }
 
 .title-row h1 {
   font-size: 1.15rem;
   font-weight: 600;
-  margin: 4px 0;
+  margin: 0;
   letter-spacing: 0.02em;
 }
 
