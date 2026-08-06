@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lake Mendota Buoy Data</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+</head>
+
+<body>
+  <header id="controls">
+    <div class="title-row">
+      <h1>Lake Mendota Buoy</h1>
+      <span id="loadStatus" class="status"></span>
+    </div>
+
+    <div class="range-row">
+      <label>Range:
+        <input type="date" id="startDate">
+        &ndash;
+        <input type="date" id="endDate">
+      </label>
+      <div class="presets">
+        <button data-days="7">7d</button>
+        <button data-days="30">30d</button>
+        <button data-days="90">90d</button>
+        <button data-days="all">All</button>
+      </div>
+      <span id="binNote" class="bin-note"></span>
+    </div>
+
+    <div class="varToggles" id="varToggles"></div>
+  </header>
+
+  <main id="charts"></main>
+
+  <footer>
+    <p>Scroll on any chart to zoom the time range (synced across all charts). Wind arrows point in the direction the
+      wind is blowing <em>toward</em> &mdash; the opposite of meteorological convention, which records the direction
+      wind comes <em>from</em>.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

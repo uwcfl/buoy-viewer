@@ -1,0 +1,241 @@
+:root {
+  --deep: #0b3d4c;
+  --mid: #14708c;
+  --surface: #eef5f5;
+  --panel: #ffffff;
+  --ink: #12242a;
+  --muted: #5c7680;
+  --accent: #d97a3c;
+  --line: #d7e3e3;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+header#controls {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--deep);
+  color: #eef5f5;
+  padding: 10px 18px 14px;
+}
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.title-row h1 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 4px 0;
+  letter-spacing: 0.02em;
+}
+
+.status {
+  font-size: 0.75rem;
+  color: #9fc8d6;
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 6px 0 8px;
+  font-size: 0.82rem;
+}
+
+.range-row input[type="date"] {
+  background: #0e4a5c;
+  border: 1px solid #1c6a82;
+  color: #eef5f5;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 0.8rem;
+}
+
+.presets button {
+  background: transparent;
+  border: 1px solid #2a7f99;
+  color: #cfe8ee;
+  padding: 3px 9px;
+  margin-right: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.presets button:hover {
+  background: #145a70;
+}
+
+.bin-note {
+  margin-left: auto;
+  font-style: italic;
+  color: #9fc8d6;
+  font-size: 0.76rem;
+}
+
+.varToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.varToggles button {
+  background: transparent;
+  border: 1px solid #2a7f99;
+  color: #9fc8d6;
+  padding: 3px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.76rem;
+  transition: all 0.15s ease;
+}
+
+.varToggles button:hover {
+  background: #145a70;
+  color: #eef5f5;
+}
+
+.varToggles button.active {
+  background: #1c6a82;
+  border-color: #49a8c7;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+main#charts {
+  padding: 14px 18px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chart-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px 4px;
+}
+
+.chart-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.chart-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--deep);
+}
+
+.chart-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.unit-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.unit-toggle button {
+  font-size: 0.7rem;
+  border: 1px solid var(--mid);
+  background: #fff;
+  color: var(--mid);
+  border-radius: 3px;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+
+.unit-toggle button.active {
+  background: var(--mid);
+  color: #fff;
+}
+
+.depth-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 4px 0 6px;
+}
+
+.depth-swatch {
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: #fff;
+  opacity: 1;
+}
+
+.depth-swatch.off {
+  opacity: 0.25;
+  color: #333;
+}
+
+svg.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.axis path,
+.axis line {
+  stroke: #b9c9c9;
+}
+
+.axis text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.gridline {
+  stroke: #eee;
+}
+
+.legend-line {
+  fill: none;
+  stroke-width: 1.4;
+}
+
+.hover-line {
+  stroke: var(--accent);
+  stroke-dasharray: 2, 2;
+}
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(11, 61, 76, 0.95);
+  color: #eef5f5;
+  font-size: 0.72rem;
+  padding: 4px 7px;
+  border-radius: 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+footer {
+  padding: 8px 18px 30px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  max-width: 760px;
+}
