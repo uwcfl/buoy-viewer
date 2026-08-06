@@ -21,7 +21,7 @@ body {
 }
 
 header#controls {
-  position: sticky;
+  /* position: sticky; */
   top: 0;
   z-index: 10;
   background: var(--deep);
@@ -291,4 +291,18 @@ footer {
   font-size: 0.72rem;
   color: var(--muted);
   max-width: 760px;
+}
+
+@media (max-width: 700px) {
+  .buoy-logo-wrap {
+    display: none;
+  }
+
+  header#controls {
+    align-items: flex-start;
+  }
+
+  .header-buoy-info {
+    max-width: 100%;
+  }
 }
