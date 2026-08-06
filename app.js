@@ -61,6 +61,7 @@ const state = {
   wtProfileMode: "heatmap", // 'lines' | 'heatmap'
   cache: new Map(),  // dateStr -> array of records, or 'missing'
   allNaCols: new Set(), // discovered lazily, hidden regardless of toggle unless user forces
+  droppedDays: new Set(), // dateStr of days identified as following a 3+ day gap; persists once found
 };
 
 const today = new Date();
@@ -147,10 +148,25 @@ async function loadRange(start, end) {
   document.getElementById("loadStatus").textContent = "loading\u2026";
   await Promise.all(days.map(loadDay));
   document.getElementById("loadStatus").textContent = "";
+
+  // Identify and drop days that follow a 3 day gap - mostly intended for start of year (bad data after deployment) 
+  let missingStreak = 0;
+  for (const d of days) {
+    const key = dateStr(d);
+    const v = state.cache.get(key);
+    if (!v || v === "missing") {
+      missingStreak++;
+    } else {
+      if (missingStreak >= 3) state.droppedDays.add(key);
+      missingStreak = 0;
+    }
+  }
+
   let recs = [];
   for (const d of days) {
-    const v = state.cache.get(dateStr(d));
-    if (v && v !== "missing") recs = recs.concat(v);
+    const key = dateStr(d);
+    const v = state.cache.get(key);
+    if (v && v !== "missing" && !state.droppedDays.has(key)) recs = recs.concat(v);
   }
   recs.sort((a, b) => a.timestamp - b.timestamp);
   return recs;
