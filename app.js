@@ -3,7 +3,7 @@
 const DEPTHS = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 const WT_KEYS = DEPTHS.map((d, i) => `wt${i + 1}`); // maps to watertemp(1..23)
 const FILE_PREFIX = "https://mendota-buoy-proxy.sam-r-blackburn.workers.dev/mendota_buoy_limnodata.";
-const EARLIEST = new Date(new Date().getFullYear(), 3, 1); // Mar 1 current year
+const EARLIEST = new Date(new Date().getFullYear(), 4, 1); // Apr 1 current year
 
 // single-series plots: key -> {label, unit}
 const SIMPLE_VARS = {
@@ -128,12 +128,23 @@ async function loadDay(d) {
       const url = `${FILE_PREFIX}${key}.csv`;
       const webCache = await caches.open("buoy-data-cache");
 
-      // Layer 2: Persistent Browser Cache Check
-      let resp = await webCache.match(url);
+      // Check if 'd' is the current day or previous day (in Central Time)
+      const now = toChicago(new Date());
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const isCurrentOrPreviousDay = (key === dateStr(now) || key === dateStr(yesterday));
+
+      let resp;
+
+      // Only check the browser CacheStorage if the date is older than yesterday
+      if (!isCurrentOrPreviousDay) {
+        resp = await webCache.match(url);
+      }
+
       if (!resp) {
         resp = await fetch(url);
-        if (resp.ok) {
-          // Store a copy in the browser cache for future reloads
+        // Only write to persistent CacheStorage if it's older than yesterday
+        if (resp.ok && !isCurrentOrPreviousDay) {
           webCache.put(url, resp.clone());
         }
       }
@@ -419,8 +430,14 @@ function attachInteractions(svg, panelData, x, width, height, seriesInfo) {
       }
       html += `<span style="color:${s.color}">\u25cf</span> ${s.label}: ${valStr}<br>`;
     }
-    tooltip.style("display", null).html(html)
-      .style("left", (pageX + 12) + "px")
+
+    tooltip.style("display", null).html(html);
+    const tooltipWidth = tooltip.node().offsetWidth;
+    const isRightThird = pageX > (window.innerWidth * (2 / 3));
+    const leftPos = isRightThird ? (pageX - tooltipWidth - 12) : (pageX + 12);
+
+    tooltip
+      .style("left", leftPos + "px")
       .style("top", (pageY - 20) + "px");
   }
 
@@ -823,8 +840,13 @@ function attachHeatmapInteractions(svg, panelData, x, y, width, height) {
     html += `Depth: ${targetDepth.toFixed(1)} m<br>`;
     html += `Temp: ${temp != null ? temp.toFixed(2) + " \u00b0C" : "\u2013"}`;
 
-    tooltip.style("display", null).html(html)
-      .style("left", (pageX + 12) + "px")
+    tooltip.style("display", null).html(html);
+    const tooltipWidth = tooltip.node().offsetWidth;
+    const isRightThird = pageX > (window.innerWidth * (2 / 3));
+    const leftPos = isRightThird ? (pageX - tooltipWidth - 12) : (pageX + 12);
+
+    tooltip
+      .style("left", leftPos + "px")
       .style("top", (pageY - 20) + "px");
   }
 
@@ -1189,7 +1211,7 @@ window.addEventListener("resize", () => render());
 
 (async function init() {
   const latest = await findLatestAvailable();
-  const start = new Date(latest.getTime() - 7 * 86400000);
+  const start = new Date(latest.getTime() - 3 * 86400000);
   start.setHours(0, 0, 0, 0);
   setDomain(start, latest, true);
 })();
