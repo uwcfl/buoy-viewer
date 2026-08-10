@@ -21,7 +21,6 @@ body {
 }
 
 header#controls {
-  /* position: sticky; */
   top: 0;
   z-index: 10;
   background: var(--deep);
@@ -67,7 +66,6 @@ header#controls {
 
 .buoy-logo-wrap {
   position: relative;
-  /* no height set — align-items: stretch on the flex parent handles this */
   flex-shrink: 0;
   overflow: hidden;
   border-radius: 8px;
@@ -79,7 +77,6 @@ header#controls {
   height: 100%;
   width: 100%;
   object-fit: cover;
-  /* now safe: wrapper's ratio will match the image's, so no crop/letterbox */
 }
 
 .title-row {
@@ -176,6 +173,97 @@ main#charts {
   flex-direction: column;
   gap: 16px;
 }
+
+/* ---------- Mini Cards ---------- */
+
+.mini-cards-section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+.mini-cards-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mini-cards-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--deep);
+}
+
+.mini-cards-timestamp {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.mini-cards-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mini-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 8px 10px;
+  flex: 1 1 180px;
+  min-width: 120px;
+  max-width: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.mini-card-title {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--deep);
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-card-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--deep);
+}
+
+.mini-card-grid-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.mini-card-grid-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.mini-card-grid-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mini-card-grid-val {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--deep);
+}
+
+/* ---------- Chart Panels ---------- */
 
 .chart-panel {
   background: var(--panel);

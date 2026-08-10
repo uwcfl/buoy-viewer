@@ -55,6 +55,7 @@ const state = {
   domain: null,           // [Date, Date] currently displayed
   visible: new Set(["wtprofile", "do", "par", "wind", "airTL", "rhL",
     "pco2ppm_Avg", "spCond", "pH", "chlorYSI", "phycoYSI", "turbid", "fdom"]),
+  showCurrentConditions: true,
   depthOn: new Set(WT_KEYS),
   doUnit: "sat", // 'sat' | 'raw'
   wtProfileMode: "heatmap", // 'lines' | 'heatmap'
@@ -64,10 +65,6 @@ const state = {
 };
 
 // Data files store TIMESTAMP in UTC; the app displays everything in Central time (CDT/CST).
-// This converts a true UTC instant into a Date object whose LOCAL getters (getHours, getDate, etc.)
-// return Chicago wall-clock time, regardless of the viewer's own browser timezone. d3's time scales
-// and timeFormat read those local getters, so once timestamps are converted at parse time, every
-// downstream axis/tooltip/bin boundary is already in Central time with no further changes needed.
 const chicagoParts = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Chicago",
   year: "numeric", month: "2-digit", day: "2-digit",
@@ -90,7 +87,6 @@ today.setHours(23, 59, 59, 999);
 /* ---------- Data loading ---------- */
 
 function dateStr(d) {
-  // local calendar date, not UTC (avoids off-by-one near midnight in negative-UTC-offset zones)
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
@@ -102,7 +98,6 @@ function parseFile(text) {
   const data = rows.slice(4).filter(r => r.length > 1 && r[0]);
   const num = v => { const f = parseFloat(v); return (v === undefined || v === "NAN" || isNaN(f)) ? null : f; };
   return data.map(r => {
-    // raw timestamp string is UTC (no offset in source); parse as UTC via "Z", then convert to Central
     const rec = { timestamp: toChicago(new Date(r[0].replace(" ", "T") + "Z")) };
     WT_KEYS.forEach((k, i) => rec[k] = num(r[COL_INDEX[`watertemp(${i + 1})`]]));
     for (const k of ["airTL", "rhL", "wsL", "wdL", "IRTL", "pco2ppm_Avg", "PAR_above_Avg",
@@ -114,37 +109,43 @@ function parseFile(text) {
   });
 }
 
+const MAX_CACHE_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+
 async function loadDay(d) {
   const key = dateStr(d);
 
-  // Layer 1: In-Memory Check (Handles instant lookup & active in-flight requests)
   if (state.cache.has(key)) {
     return state.cache.get(key);
   }
 
-  // Store the active Promise immediately to prevent duplicate requests if called concurrently
   const loadPromise = (async () => {
     try {
       const url = `${FILE_PREFIX}${key}.csv`;
       const webCache = await caches.open("buoy-data-cache");
 
-      // Check if 'd' is the current day or previous day (in Central Time)
       const now = toChicago(new Date());
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      const isCurrentOrPreviousDay = (key === dateStr(now) || key === dateStr(yesterday));
+      const isWithin48Hours = (now.getTime() - d.getTime()) < MAX_CACHE_AGE_MS;
 
       let resp;
 
-      // Only check the browser CacheStorage if the date is older than yesterday
-      if (!isCurrentOrPreviousDay) {
+      if (!isWithin48Hours) {
         resp = await webCache.match(url);
+
+        if (resp) {
+          const cachedTimeHeader = resp.headers.get("Date") || resp.headers.get("sw-fetched-on");
+          if (cachedTimeHeader) {
+            const cacheAge = Date.now() - new Date(cachedTimeHeader).getTime();
+            if (cacheAge > MAX_CACHE_AGE_MS) {
+              await webCache.delete(url);
+              resp = null;
+            }
+          }
+        }
       }
 
       if (!resp) {
         resp = await fetch(url);
-        // Only write to persistent CacheStorage if it's older than yesterday
-        if (resp.ok && !isCurrentOrPreviousDay) {
+        if (resp.ok && !isWithin48Hours) {
           webCache.put(url, resp.clone());
         }
       }
@@ -160,16 +161,13 @@ async function loadDay(d) {
     }
   })();
 
-  // Track the pending promise in memory
   state.cache.set(key, loadPromise);
 
-  // Once resolved, replace the promise with the final parsed result
   const result = await loadPromise;
   state.cache.set(key, result);
   return result;
 }
 
-// ensure every day in [start,end] is loaded (or known missing); returns merged records
 async function loadRange(start, end) {
   const days = [];
   for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
@@ -181,7 +179,6 @@ async function loadRange(start, end) {
   await Promise.all(days.map(loadDay));
   document.getElementById("loadStatus").textContent = "";
 
-  // Identify and drop days that follow a 3 day gap - mostly intended for start of year (bad data after deployment) 
   let missingStreak = 0;
   for (const d of days) {
     const key = dateStr(d);
@@ -204,7 +201,6 @@ async function loadRange(start, end) {
   return recs;
 }
 
-// find the most recent day with data, probing backward from today, to seed default range
 async function findLatestAvailable() {
   let d = new Date(today);
   for (let i = 0; i < 400 && d >= EARLIEST; i++) {
@@ -232,7 +228,6 @@ function binLabel(mins) {
   return "weekly averages";
 }
 
-// generic binning; circularKeys get vector-averaged (degrees)
 function binRecords(records, minutes, circularKeys = new Set()) {
   const binMs = minutes * 60000;
   const bins = new Map();
@@ -275,6 +270,127 @@ const chartsEl = d3.select("#charts");
 const tooltip = d3.select("body").append("div").attr("class", "tooltip").style("display", "none");
 
 function fmtDate(d) { return d3.timeFormat("%Y-%m-%d %H:%M")(d); }
+
+function getLastValue(records, key) {
+  for (let i = records.length - 1; i >= 0; i--) {
+    if (records[i][key] != null && !isNaN(records[i][key])) {
+      return records[i][key];
+    }
+  }
+  return null;
+}
+
+function getLastDepthTemp(records, targetDepth) {
+  for (let i = records.length - 1; i >= 0; i--) {
+    const val = interpolateTempAtDepth(records[i], targetDepth);
+    if (val != null) return val;
+  }
+  return null;
+}
+
+/* ---------- Mini Cards Rendering ---------- */
+
+function renderMiniCards(records) {
+  const latestRec = records[records.length - 1];
+  if (!latestRec) return;
+
+  const section = chartsEl.append("div").attr("class", "mini-cards-section");
+  const header = section.append("div").attr("class", "mini-cards-header");
+  header.append("div").attr("class", "mini-cards-title").text("Current Conditions");
+  header.append("div").attr("class", "mini-cards-timestamp").text(`As of ${fmtDate(latestRec.timestamp)}`);
+
+  const grid = section.append("div").attr("class", "mini-cards-grid");
+
+  GROUPS.forEach(g => {
+    if (!state.visible.has(g.key)) return;
+
+    const card = grid.append("div").attr("class", "mini-card");
+
+    if (g.kind === "profile") {
+      const titleRow = card.append("div").attr("class", "mini-card-title");
+      titleRow.append("span").text(g.label);
+
+      const subGrid = card.append("div").attr("class", "mini-card-grid-values");
+      [0, 5, 10, 15, 20].forEach(depth => {
+        const temp = getLastDepthTemp(records, depth);
+        const item = subGrid.append("div").attr("class", "mini-card-grid-item");
+        item.append("span").attr("class", "mini-card-grid-label").text(`${depth}m`);
+        item.append("span").attr("class", "mini-card-grid-val")
+          .text(temp != null ? `${temp.toFixed(1)}\u00b0C` : "\u2013");
+      });
+    } else if (g.kind === "do") {
+      const titleRow = card.append("div").attr("class", "mini-card-title");
+      titleRow.append("span").text(g.label);
+
+      const ut = titleRow.append("div").attr("class", "unit-toggle");
+      ["sat", "raw"].forEach(u => {
+        ut.append("button")
+          .text(u === "sat" ? "%" : "mg/L")
+          .classed("active", state.doUnit === u)
+          .on("click", (e) => {
+            e.stopPropagation();
+            state.doUnit = u;
+            render();
+          });
+      });
+
+      const key = state.doUnit === "sat" ? "do_sat" : "do_raw";
+      const unit = state.doUnit === "sat" ? "%" : "mg/L";
+      const val = getLastValue(records, key);
+
+      const valDiv = card.append("div").attr("class", "mini-card-value");
+      valDiv.text(val != null ? `${val.toFixed(2)} ${unit}` : "\u2013");
+    } else if (g.kind === "par") {
+      const titleRow = card.append("div").attr("class", "mini-card-title");
+      titleRow.append("span").text(g.label);
+
+      const subGrid = card.append("div").attr("class", "mini-card-grid-values");
+
+      const aboveVal = getLastValue(records, "PAR_above_Avg");
+      const itemAbove = subGrid.append("div").attr("class", "mini-card-grid-item");
+      itemAbove.append("span").attr("class", "mini-card-grid-label").text("Above");
+      itemAbove.append("span").attr("class", "mini-card-grid-val")
+        .text(aboveVal != null ? `${aboveVal.toFixed(1)} \u00b5mol/m\u00b2/s` : "\u2013");
+
+      const belowVal = getLastValue(records, "PAR_below_Avg");
+      const itemBelow = subGrid.append("div").attr("class", "mini-card-grid-item");
+      itemBelow.append("span").attr("class", "mini-card-grid-label").text("Below");
+      itemBelow.append("span").attr("class", "mini-card-grid-val")
+        .text(belowVal != null ? `${belowVal.toFixed(1)} \u00b5mol/m\u00b2/s` : "\u2013");
+    } else if (g.kind === "wind") {
+      const titleRow = card.append("div").attr("class", "mini-card-title");
+      titleRow.append("span").text(g.label);
+
+      const ws = getLastValue(records, "wsL");
+      const wd = getLastValue(records, "wdL");
+
+      const subGrid = card.append("div").attr("class", "mini-card-grid-values");
+
+      const itemSpd = subGrid.append("div").attr("class", "mini-card-grid-item");
+      itemSpd.append("span").attr("class", "mini-card-grid-label").text("Speed");
+      itemSpd.append("span").attr("class", "mini-card-grid-val")
+        .text(ws != null ? `${ws.toFixed(1)} m/s` : "\u2013");
+
+      const itemDir = subGrid.append("div").attr("class", "mini-card-grid-item");
+      itemDir.append("span").attr("class", "mini-card-grid-label").text("Direction");
+      if (wd != null) {
+        const towards = (wd + 180) % 360;
+        itemDir.append("span").attr("class", "mini-card-grid-val")
+          .text(`${towards.toFixed(0)}\u00b0 (${getCompassDirection(towards)})`);
+      } else {
+        itemDir.append("span").attr("class", "mini-card-grid-val").text("\u2013");
+      }
+    } else if (g.kind === "simple") {
+      const titleRow = card.append("div").attr("class", "mini-card-title");
+      titleRow.append("span").text(g.label);
+
+      const val = getLastValue(records, g.vkey);
+      const valDiv = card.append("div").attr("class", "mini-card-value");
+      const unitStr = g.unit ? ` ${g.unit}` : "";
+      valDiv.text(val != null ? `${val.toFixed(2)}${unitStr}` : "\u2013");
+    }
+  });
+}
 
 /* ---------- Helper to create SVG with clipPath ---------- */
 
@@ -466,7 +582,6 @@ function attachInteractions(svg, panelData, x, width, height, seriesInfo) {
 
       const [mx] = d3.pointer(event);
 
-      // Mobile 2-finger pinch zoom
       if (activePointers.size === 2 && startDomain && initialPinchDist > 0) {
         guide.style("display", "none");
         tooltip.style("display", "none");
@@ -501,7 +616,6 @@ function attachInteractions(svg, panelData, x, width, height, seriesInfo) {
         return;
       }
 
-      // Click and drag (Pan)
       if (activePointers.size === 1 && startDomain) {
         const dx = event.clientX - startX;
         if (Math.abs(dx) > 3) {
@@ -667,7 +781,6 @@ function renderProfileHeatmap(div, group, records, binned) {
   const minTemp = allVals.length ? d3.min(allVals) : 0;
   const maxTemp = allVals.length ? d3.max(allVals) : 30;
 
-  // Temperature gradient legend
   const legendDiv = div.append("div").attr("class", "heatmap-legend")
     .style("display", "flex")
     .style("align-items", "center")
@@ -696,12 +809,10 @@ function renderProfileHeatmap(div, group, records, binned) {
 
   const { svg, width } = makeSvg(wrapper, height);
 
-  // Position SVG above canvas so the overlay captures pointer events
   svg
     .style("position", "relative")
     .style("z-index", "1");
 
-  // Position canvas behind SVG and pass pointer events through
   const canvas = wrapper.insert("canvas", "svg")
     .style("position", "absolute")
     .style("left", "0")
@@ -1001,12 +1112,10 @@ function renderWind(group, records, binned, mins) {
     .range([height - MARGIN.bottom, MARGIN.top]);
   drawAxes(svg, x, y, width, height);
 
-  // Calculate subsampling step and arrow spacing interval
   const plotWidth = width - MARGIN.left - MARGIN.right;
   const maxArrows = Math.max(1, Math.floor(plotWidth / 22));
   const step = Math.max(1, Math.ceil(binned.length / maxArrows));
-  // const arrowPts = binned.filter((d, i) => i % step === 0 && d.wsL != null && d.wdL != null);
-  // Calculate vector averages for each step block of arrows
+
   const arrowPts = [];
   for (let i = 0; i < binned.length; i += step) {
     const chunk = binned.slice(i, i + step).filter(d => d.wsL != null && d.wdL != null);
@@ -1024,7 +1133,7 @@ function renderWind(group, records, binned, mins) {
     if (avgWd < 0) avgWd += 360;
 
     arrowPts.push({
-      time: chunk[Math.floor(chunk.length / 2)].time, // center time of block
+      time: chunk[Math.floor(chunk.length / 2)].time,
       wsL: speedSum / chunk.length,
       wdL: avgWd
     });
@@ -1043,7 +1152,6 @@ function renderWind(group, records, binned, mins) {
 
   const arrowSpacingText = step > 1 ? ` (${formatInterval(arrowIntervalMins)} average)` : "";
 
-  // Subtitle showing both data averaging period and arrow sampling spacing
   div.select(".chart-title-group").append("div").attr("class", "chart-sub")
     .text(`m/s \u2014 arrows show direction wind is blowing toward${arrowSpacingText}`);
 
@@ -1081,6 +1189,7 @@ function renderWind(group, records, binned, mins) {
 
   attachInteractions(svg, binned, x, width, height, seriesInfo);
 }
+
 /* ---------- Toggles UI ---------- */
 
 function buildToggles() {
@@ -1123,6 +1232,19 @@ function buildToggles() {
     render();
   });
   wrap.appendChild(toggleAllBtn);
+
+  // Show / Hide Current Conditions Button
+  const toggleCondBtn = document.createElement("button");
+  toggleCondBtn.type = "button";
+  toggleCondBtn.textContent = state.showCurrentConditions ? "Hide Current Conditions" : "Show Current Conditions";
+  toggleCondBtn.style.fontWeight = "bold";
+  toggleCondBtn.classList.toggle("active", state.showCurrentConditions);
+
+  toggleCondBtn.addEventListener("click", () => {
+    state.showCurrentConditions = !state.showCurrentConditions;
+    render();
+  });
+  wrap.appendChild(toggleCondBtn);
 }
 
 /* ---------- Main render ---------- */
@@ -1136,9 +1258,8 @@ async function render() {
   document.getElementById("endDate").value = dateStr(end);
 
   const records = await loadRange(start, end);
-  if (token !== renderToken) return; // a newer render superseded this one
+  if (token !== renderToken) return;
 
-  // detect all-NaN columns among currently loaded data, to inform toggle labels
   Object.keys(SIMPLE_VARS).forEach(k => {
     const anyVal = records.some(r => r[k] != null);
     if (!anyVal && records.length) state.allNaCols.add(k); else state.allNaCols.delete(k);
@@ -1152,7 +1273,6 @@ async function render() {
 
   buildToggles();
 
-  // 1. Lock height and save scroll position before clearing layout
   const savedScrollY = window.scrollY;
   const currentHeight = chartsEl.node().offsetHeight;
   if (currentHeight > 0) {
@@ -1160,6 +1280,11 @@ async function render() {
   }
 
   chartsEl.html("");
+
+  if (state.showCurrentConditions && records.length > 0) {
+    renderMiniCards(records);
+  }
+
   GROUPS.forEach(g => {
     if (!state.visible.has(g.key)) return;
     if (g.kind === "simple") renderSimple(g, records, binned);
@@ -1169,7 +1294,6 @@ async function render() {
     else if (g.kind === "wind") renderWind(g, records, binned, mins);
   });
 
-  // 2. Restore scroll position and unlock height
   window.scrollTo(0, savedScrollY);
   chartsEl.style("min-height", null);
 }
@@ -1200,7 +1324,7 @@ document.querySelectorAll(".presets button").forEach(btn => {
     const days = btn.dataset.days;
     const end = new Date(today);
     const start = days === "all" ? new Date(EARLIEST) : new Date(end.getTime() - days * 86400000);
-    start.setHours(0, 0, 0, 0); // Normalize start time to midnight
+    start.setHours(0, 0, 0, 0);
     setDomain(start, end, true);
   });
 });
