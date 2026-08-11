@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Lake Mendota Buoy Data</title>
+  <title>Trout Lake Buoy Data</title>
   <link rel="icon" type="image/png" href="assets/CFL-Logo.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
@@ -12,8 +12,8 @@
 
 <body>
   <nav class="lake-nav">
-    <a href="index.html" class="active">Lake Mendota</a>
-    <a href="trout.html">Trout Lake</a>
+    <a href="index.html">Lake Mendota</a>
+    <a href="trout.html" class="active">Trout Lake</a>
     <a href="sparkling.html">Sparkling Lake</a>
   </nav>
 
@@ -22,12 +22,12 @@
       <div class="header-top">
         <div class="title-row">
           <img src="assets/CFL-Logo.png" alt="Center for Limnology Logo" class="cfl-logo">
-          <h1>Lake Mendota Buoy Live Data</h1>
+          <h1>Trout Lake Buoy Live Data</h1>
           <span id="loadStatus" class="status"></span>
         </div>
         <p class="header-buoy-info">
-          Operated by the UW-Madison's Center for Limnology, David Buoy records water quality measurements every minute
-          on Lake Mendota. Below are real-time data from the middle of the lake. Data are not quality controlled.
+          Operated by the UW-Madison's Center for Limnology, the Trout Lake buoy records water quality measurements
+          on Trout Lake. Below are real-time data from the lake. Data are not quality controlled.
         </p>
       </div>
 
@@ -52,7 +52,7 @@
     </div>
 
     <div class="buoy-logo-wrap" id="buoyWrap">
-      <img src="assets/buoy.png" alt="David Buoy" class="buoy-logo" id="buoyImg">
+      <img src="" alt="Trout Lake Buoy" class="buoy-logo" id="buoyImg">
     </div>
   </header>
 
@@ -63,7 +63,7 @@
   </footer>
 
   <script src="shared.js"></script>
-  <script src="mendota.js"></script>
+  <script src="trout.js"></script>
 </body>
 
 </html>

@@ -20,6 +20,35 @@ body {
   color: var(--ink);
 }
 
+.lake-nav {
+  background: #072933;
+  padding: 6px 18px;
+  display: flex;
+  gap: 12px;
+  border-bottom: 1px solid #145a70;
+}
+
+.lake-nav a {
+  color: #9fc8d6;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.lake-nav a:hover {
+  color: #ffffff;
+  background: #145a70;
+}
+
+.lake-nav a.active {
+  color: #ffffff;
+  background: #1c6a82;
+  font-weight: 600;
+}
+
 header#controls {
   top: 0;
   z-index: 10;
@@ -293,6 +322,7 @@ main#charts {
 .unit-toggle {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .unit-toggle button {
@@ -301,8 +331,10 @@ main#charts {
   background: #fff;
   color: var(--mid);
   border-radius: 3px;
-  padding: 1px 7px;
+  padding: 1px 6px;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .unit-toggle button.active {
