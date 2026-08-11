@@ -54,9 +54,8 @@ function parseDualEndpoints(exportText, watertempText) {
 
     const wtRow = wtMap.get(tsStr);
 
-    // Date parsing (assume UTC format e.g. "2026-08-04 00:00:00")
-    const dateUtc = new Date(tsStr.replace(' ', 'T') + 'Z');
-    const rec = { timestamp: toChicago(dateUtc) };
+    // Date parsing (data is already in local Chicago time zone)
+    const rec = { timestamp: new Date(tsStr.replace(' ', 'T')) };
 
     // Parse wind (Sparkling has wind_speed_2m)
     const wsVal = num(r.wind_speed || r.wind_speed_2m);
