@@ -6,23 +6,23 @@ const TROUT_DEPTHS = [0, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8,
 const TROUT_WT_KEYS = TROUT_DEPTHS.map((_, i) => `wt${i + 1}`);
 
 const TROUT_SIMPLE_VARS = {
-  air_temp:      { label: 'Air Temp',              unit: '\u00b0C' },
-  rel_hum:       { label: 'Relative Humidity',     unit: '%' },
-  par:           { label: 'PAR',                   unit: '\u00b5mol/m\u00b2/s' },
-  spec_cond:     { label: 'Specific Conductivity', unit: '\u00b5S/cm' },
+  air_temp: { label: 'Air Temp', unit: '\u00b0C' },
+  rel_hum: { label: 'Relative Humidity', unit: '%' },
+  par: { label: 'PAR', unit: '\u00b5mol/m\u00b2/s' },
+  spec_cond: { label: 'Specific Conductivity', unit: '\u00b5S/cm' },
   barom_pres_mbar: { label: 'Barometric Pressure', unit: 'mbar' },
-  vapor_pres:    { label: 'Vapor Pressure',        unit: 'kPa' },
-  sat_vapor_pres: { label: 'Sat Vapor Pressure',   unit: 'kPa' },
-  co2_atmos:     { label: 'CO\u2082 Atmospheric',   unit: 'ppm' },
-  co2_dissolved: { label: 'CO\u2082 Dissolved',     unit: 'ppm' },
-  precip_mm:     { label: 'Precipitation',         unit: 'mm' },
-  csi_surf_temp: { label: 'CSI Surface Temp',     unit: '\u00b0C' },
+  vapor_pres: { label: 'Vapor Pressure', unit: 'kPa' },
+  sat_vapor_pres: { label: 'Sat Vapor Pressure', unit: 'kPa' },
+  co2_atmos: { label: 'CO\u2082 Atmospheric', unit: 'ppm' },
+  co2_dissolved: { label: 'CO\u2082 Dissolved', unit: 'ppm' },
+  precip_mm: { label: 'Precipitation', unit: 'mm' },
+  csi_surf_temp: { label: 'CSI Surface Temp', unit: '\u00b0C' },
 };
 
 const TROUT_GROUPS = [
   { key: 'wtprofile', label: 'Water Temp Profile', kind: 'profile' },
-  { key: 'do',        label: 'Dissolved Oxygen',    kind: 'do' },
-  { key: 'wind',      label: 'Wind',                kind: 'wind' },
+  { key: 'do', label: 'Dissolved Oxygen', kind: 'do' },
+  { key: 'wind', label: 'Wind', kind: 'wind' },
   ...Object.keys(TROUT_SIMPLE_VARS).map(k => ({
     key: k, label: TROUT_SIMPLE_VARS[k].label, kind: 'simple', vkey: k, unit: TROUT_SIMPLE_VARS[k].unit,
   })),
@@ -104,8 +104,8 @@ async function troutFetchRaw(d) {
   try {
     const yyyy = d.getFullYear();
     const yyyymmdd = dateStr(d).replace(/-/g, '');
-    const exportUrl = `https://export-buoy-proxy.sam-r-blackburn.workers.dev/Trout/${yyyy}/${yyyymmdd}`;
-    const wtUrl = `https://watertemp-buoy-proxy.sam-r-blackburn.workers.dev/Trout/${yyyy}/${yyyymmdd}`;
+    const exportUrl = `https://buoy-export-proxy.uwcfl.workers.dev/Trout/${yyyy}/${yyyymmdd}`;
+    const wtUrl = `https://buoy-watertemp-proxy.uwcfl.workers.dev/Trout/${yyyy}/${yyyymmdd}`;
 
     const [expResp, wtResp] = await Promise.all([
       fetch(exportUrl).catch(() => null),
@@ -128,13 +128,13 @@ async function troutFetchRaw(d) {
 }
 
 initBuoyApp({
-  cacheName:      'trout',
-  depths:         TROUT_DEPTHS,
-  wtKeys:         TROUT_WT_KEYS,
-  simpleVars:     TROUT_SIMPLE_VARS,
-  groups:         TROUT_GROUPS,
-  earliest:       new Date(new Date().getFullYear(), 4, 1), // May 1
-  buoyImgSrc:     null, // No buoy picture yet
+  cacheName: 'trout',
+  depths: TROUT_DEPTHS,
+  wtKeys: TROUT_WT_KEYS,
+  simpleVars: TROUT_SIMPLE_VARS,
+  groups: TROUT_GROUPS,
+  earliest: new Date(new Date().getFullYear(), 4, 1), // May 1
+  buoyImgSrc: null, // No buoy picture yet
   miniCardDepths: [0, 5, 10, 16, 25, 30], // 6 evenly-spaced depths including 0 and 30
   defaultVisible: [
     'wtprofile', 'do', 'wind', 'air_temp', 'rel_hum', 'par', 'spec_cond'
