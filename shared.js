@@ -802,7 +802,7 @@ function initBuoyApp(config) {
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
     const line = d3.line().defined(d => d[key] != null).x(d => x(d.time)).y(d => y(d[key]));
-    plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', '#0b3d4c').attr('d', line);
+    plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', '#14708c').attr('d', line);
 
     div.node()._updateX = () => {
       const xNew = xScaleFor(width);
@@ -811,7 +811,7 @@ function initBuoyApp(config) {
       plotArea.select('path.legend-line').attr('d', l);
     };
 
-    attachInteractions(svg, binned, x, width, height, [{ key, label: `DO (${unit})`, color: '#0b3d4c' }]);
+    attachInteractions(svg, binned, x, width, height, [{ key, label: `DO (${unit})`, color: '#14708c' }]);
   }
 
   function renderPAR(group, records, binned) {
