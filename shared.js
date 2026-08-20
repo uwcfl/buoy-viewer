@@ -765,7 +765,9 @@ function initBuoyApp(config) {
           let   x1 = (i < T - 1) ? xScale(binned[i + 1].time) : x0 + (x0 - xScale(binned[Math.max(0, i - 1)].time));
           if (x1 <= x0) x1 = x0 + 1;
           if (x1 < MARGIN.left || x0 > width - MARGIN.right) continue;
-          ctx.drawImage(offCanvas, i, 0, 1, D, x0, MARGIN.top, Math.max(0.5, x1 - x0 + 0.5), plotHeight);
+          const x0Floor = Math.floor(x0);
+          const drawW   = Math.max(1, Math.ceil(x1) - x0Floor + 1);
+          ctx.drawImage(offCanvas, i, 0, 1, D, x0Floor, MARGIN.top, drawW, plotHeight);
         }
         ctx.restore();
       };
