@@ -92,6 +92,7 @@ function initBuoyApp(config) {
     showCurrentConditions: true,
     depthOn:              new Set(WT_KEYS),
     doUnit:               'sat',   // 'sat' | 'raw'
+    windUnit:             'ms',    // 'ms' | 'mph'
     wtProfileMode:        'heatmap', // 'lines' | 'heatmap'
     cache:                new Map(), // dateStr → records[] | 'missing' | Promise
     droppedDays:          new Set(), // dateStr of days after a 3+ day gap
@@ -254,6 +255,7 @@ function initBuoyApp(config) {
   const chartsEl = d3.select('#charts');
   const tooltip  = d3.select('body').append('div').attr('class', 'tooltip').style('display', 'none');
   const MARGIN   = { top: 8, right: 16, bottom: 22, left: 46 };
+  const MS_TO_MPH = 2.23694;
 
   function fmtDate(d) { return d3.timeFormat('%Y-%m-%d %H:%M')(d); }
 
@@ -574,13 +576,22 @@ function initBuoyApp(config) {
           item.append('span').attr('class', 'mini-card-grid-val').text(val != null ? `${val.toFixed(1)} \u00b5mol/m\u00b2/s` : '\u2013');
         });
       } else if (g.kind === 'wind') {
-        card.append('div').attr('class', 'mini-card-title').append('span').text(g.label);
+        const titleRow = card.append('div').attr('class', 'mini-card-title');
+        titleRow.append('span').text(g.label);
+        const ut = titleRow.append('div').attr('class', 'unit-toggle');
+        ['ms', 'mph'].forEach(u => {
+          ut.append('button').text(u === 'ms' ? 'm/s' : 'mph').classed('active', state.windUnit === u)
+            .on('click', (e) => { e.stopPropagation(); state.windUnit = u; render(); });
+        });
         const ws = getLastValue(records, 'wsL');
         const wd = getLastValue(records, 'wdL');
+        const isMph = state.windUnit === 'mph';
+        const unit = isMph ? 'mph' : 'm/s';
+        const dispWs = ws != null ? (isMph ? ws * MS_TO_MPH : ws) : null;
         const subGrid = card.append('div').attr('class', 'mini-card-grid-values');
         const iSpd = subGrid.append('div').attr('class', 'mini-card-grid-item');
         iSpd.append('span').attr('class', 'mini-card-grid-label').text('Speed');
-        iSpd.append('span').attr('class', 'mini-card-grid-val').text(ws != null ? `${ws.toFixed(1)} m/s` : '\u2013');
+        iSpd.append('span').attr('class', 'mini-card-grid-val').text(dispWs != null ? `${dispWs.toFixed(1)} ${unit}` : '\u2013');
         const iDir = subGrid.append('div').attr('class', 'mini-card-grid-item');
         iDir.append('span').attr('class', 'mini-card-grid-label').text('Direction');
         if (wd != null) {
@@ -853,10 +864,20 @@ function initBuoyApp(config) {
 
   function renderWind(group, records, binned, mins) {
     const div    = panel(group);
+    const top    = div.select('.chart-title-row');
+    const ut     = top.append('div').attr('class', 'unit-toggle');
+    ['ms', 'mph'].forEach(u => {
+      ut.append('button').text(u === 'ms' ? 'm/s' : 'mph').classed('active', state.windUnit === u)
+        .on('click', () => { state.windUnit = u; render(); });
+    });
+    const isMph     = state.windUnit === 'mph';
+    const unit      = isMph ? 'mph' : 'm/s';
+    const speedMult = isMph ? MS_TO_MPH : 1;
+
     const height = 170;
     const { svg, width, clipId } = makeSvg(div, height);
     const x    = xScaleFor(width);
-    const vals = binned.map(d => d.wsL).filter(v => v != null);
+    const vals = binned.map(d => d.wsL != null ? d.wsL * speedMult : null).filter(v => v != null);
     const y    = d3.scaleLinear().domain([0, vals.length ? d3.max(vals) : 1]).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
@@ -873,7 +894,7 @@ function initBuoyApp(config) {
       chunk.forEach(d => { const rad = d.wdL * Math.PI / 180; sinSum += Math.sin(rad); cosSum += Math.cos(rad); speedSum += d.wsL; });
       let avgWd = Math.atan2(sinSum / chunk.length, cosSum / chunk.length) * 180 / Math.PI;
       if (avgWd < 0) avgWd += 360;
-      arrowPts.push({ time: chunk[Math.floor(chunk.length / 2)].time, wsL: speedSum / chunk.length, wdL: avgWd });
+      arrowPts.push({ time: chunk[Math.floor(chunk.length / 2)].time, wsL: (speedSum / chunk.length) * speedMult, wdL: avgWd });
     }
 
     const arrowIntervalMins = step * mins;
@@ -884,10 +905,10 @@ function initBuoyApp(config) {
     }
     const spacingText = step > 1 ? ` (${formatInterval(arrowIntervalMins)} average)` : '';
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub')
-      .text(`m/s \u2014 arrows show direction wind is blowing toward${spacingText}`);
+      .text(`${unit} \u2014 arrows show direction wind is blowing toward${spacingText}`);
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
-    const line = d3.line().defined(d => d.wsL != null).x(d => x(d.time)).y(d => y(d.wsL));
+    const line = d3.line().defined(d => d.wsL != null).x(d => x(d.time)).y(d => y(d.wsL * speedMult));
     plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', '#5c7680').attr('d', line);
     plotArea.selectAll('.wind-arrow').data(arrowPts).enter().append('path')
       .attr('class', 'wind-arrow').attr('d', 'M0,-7 L0,7 M0,-7 L-4,-2 M0,-7 L4,-2')
@@ -897,13 +918,18 @@ function initBuoyApp(config) {
     div.node()._updateX = () => {
       const xNew = xScaleFor(width);
       svg.select('g.axis-bottom').call(d3.axisBottom(xNew).ticks(Math.min(8, width / 90)));
-      const l = d3.line().defined(d => d.wsL != null).x(d => xNew(d.time)).y(d => y(d.wsL));
+      const l = d3.line().defined(d => d.wsL != null).x(d => xNew(d.time)).y(d => y(d.wsL * speedMult));
       plotArea.select('path.legend-line').attr('d', l);
       plotArea.selectAll('.wind-arrow').attr('transform', d => `translate(${xNew(d.time)},${y(d.wsL)}) rotate(${(d.wdL + 180) % 360})`);
     };
 
     attachInteractions(svg, binned, x, width, height, [
-      { key: 'wsL', label: 'Wind speed (m/s)', color: '#5c7680' },
+      {
+        key: 'wsL',
+        label: `Wind speed (${unit})`,
+        color: '#5c7680',
+        formatter: (v) => `${(v * speedMult).toFixed(2)}`
+      },
       {
         key: 'wdL', label: 'Wind direction (towards)', color: '#d97a3c',
         formatter: (v) => { const t = (v + 180) % 360; return `${t.toFixed(0)}\u00b0 (${getCompassDirection(t)})`; }
