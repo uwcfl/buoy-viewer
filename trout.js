@@ -129,12 +129,14 @@ async function troutFetchRaw(d) {
 
 initBuoyApp({
   cacheName: 'trout',
+  lakeName: 'Trout_Lake',
   depths: TROUT_DEPTHS,
   wtKeys: TROUT_WT_KEYS,
   simpleVars: TROUT_SIMPLE_VARS,
   groups: TROUT_GROUPS,
   earliest: new Date(new Date().getFullYear(), 4, 1), // May 1
   buoyImgSrc: null, // No buoy picture yet
+  buoyCoords: null, // set [lat, lng] to enable Maps link on buoy image
   miniCardDepths: [0, 5, 10, 16, 25, 30], // 6 evenly-spaced depths including 0 and 30
   defaultVisible: [
     'wtprofile', 'do', 'wind', 'air_temp', 'rel_hum', 'par', 'spec_cond'

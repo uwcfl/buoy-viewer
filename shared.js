@@ -7,12 +7,14 @@
  *
  * config shape: {
  *   cacheName:       string,           // unique cache namespace per lake
+ *   lakeName:        string,           // human-readable lake name for CSV filename
  *   depths:          number[],         // ordered sensor depths
  *   wtKeys:          string[],         // record keys for each depth (same length)
  *   simpleVars:      { [key]: { label, unit, voltage? } },
  *   groups:          Array<{ key, label, kind, vkey?, unit? }>,
  *   earliest:        Date,
  *   buoyImgSrc:      string | null,    // null → hide buoy image
+ *   buoyCoords:      [lat, lng] | null, // decimal coords → image links to Google Maps
  *   miniCardDepths:  number[],         // depths shown in "Current Conditions" card
  *   defaultVisible:  string[] | null,  // group keys visible by default (null = all)
  *   fetchRaw:        async (d: Date) => records[] | 'missing',
@@ -75,6 +77,14 @@ function initBuoyApp(config) {
     buoyImg.addEventListener('load', sizeBuoyWrap);
     window.addEventListener('resize', sizeBuoyWrap);
     if (buoyImg.complete) sizeBuoyWrap();
+
+    if (config.buoyCoords) {
+      const [lat, lng] = config.buoyCoords;
+      const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+      buoyWrap.style.cursor = 'pointer';
+      buoyWrap.title = 'Open buoy location in Google Maps';
+      buoyWrap.addEventListener('click', () => window.open(mapsUrl, '_blank', 'noopener'));
+    }
   } else if (buoyWrap) {
     buoyWrap.style.display = 'none';
   }
@@ -1094,12 +1104,84 @@ function initBuoyApp(config) {
     if (doRender) render();
   }
 
+  /* ---------- CSV Download ---------- */
+
+  function buildCsvColumns() {
+    // Returns array of { header, getValue(rec) } for all currently visible vars
+    const cols = [{ header: 'timestamp', getValue: r => fmtDate(r.timestamp) }];
+    GROUPS.forEach(g => {
+      if (!state.visible.has(g.key)) return;
+      if (g.kind === 'simple') {
+        cols.push({ header: `${g.label} (${g.unit || ''})`.trim(), getValue: r => r[g.vkey] != null ? r[g.vkey] : '' });
+      } else if (g.kind === 'profile') {
+        DEPTHS.forEach((depth, i) => {
+          cols.push({ header: `Water Temp ${depth}m (°C)`, getValue: r => r[WT_KEYS[i]] != null ? r[WT_KEYS[i]] : '' });
+        });
+      } else if (g.kind === 'do') {
+        cols.push({ header: 'DO Saturation (%)', getValue: r => r.do_sat != null ? r.do_sat : '' });
+        cols.push({ header: 'DO (mg/L)',          getValue: r => r.do_raw != null ? r.do_raw : '' });
+      } else if (g.kind === 'par') {
+        cols.push({ header: 'PAR Above (µmol/m²/s)', getValue: r => r.PAR_above_Avg != null ? r.PAR_above_Avg : '' });
+        cols.push({ header: 'PAR Below (µmol/m²/s)', getValue: r => r.PAR_below_Avg != null ? r.PAR_below_Avg : '' });
+      } else if (g.kind === 'wind') {
+        cols.push({ header: 'Wind Speed (m/s)',     getValue: r => r.wsL != null ? r.wsL : '' });
+        cols.push({ header: 'Wind Direction (°from)', getValue: r => r.wdL != null ? r.wdL : '' });
+      }
+    });
+    return cols;
+  }
+
+  function downloadCsv() {
+    if (!state.domain) return;
+    const [start, end] = state.domain;
+
+    // Collect all cached records for the domain at original resolution
+    let recs = [];
+    for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+         d <= end; d.setDate(d.getDate() + 1)) {
+      if (d < EARLIEST) continue;
+      const key = dateStr(d);
+      const v   = state.cache.get(key);
+      if (v && v !== 'missing' && !state.droppedDays.has(key)) recs = recs.concat(v);
+    }
+    recs.sort((a, b) => a.timestamp - b.timestamp);
+
+    const rows = recs;
+
+    const cols = buildCsvColumns();
+    const header = cols.map(c => `"${c.header.replace(/"/g, '""')}"`).join(',');
+    const body   = rows.map(r => cols.map(c => {
+      const v = c.getValue(r);
+      return v === '' ? '' : (typeof v === 'string' ? `"${v.replace(/"/g, '""')}"` : String(v));
+    }).join(',')).join('\n');
+
+    const lakeName  = (config.lakeName || 'buoy').replace(/\s+/g, '_');
+    const startStr  = dateStr(start);
+    const endStr    = dateStr(end);
+    const filename  = `${lakeName}_${startStr}_to_${endStr}.csv`;
+
+    const blob = new Blob([header + '\n' + body], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   /* ---------- Header Controls ---------- */
 
   function parseLocalDate(str) {
     const [y, m, d] = str.split('-').map(Number);
     return new Date(y, m - 1, d);
   }
+
+  // CSV download button
+  const dlBtn = document.createElement('button');
+  dlBtn.id = 'csvDownloadBtn';
+  dlBtn.type = 'button';
+  dlBtn.title = 'Download data as CSV';
+  dlBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13" style="vertical-align:-2px;margin-right:4px"><path d="M8 12l-4-4h2.5V3h3v5H12L8 12zm-5 2h10v1.5H3V14z"/></svg>Download CSV';
+  document.querySelector('.range-row').appendChild(dlBtn);
+  dlBtn.addEventListener('click', downloadCsv);
 
   document.getElementById('startDate').addEventListener('change', (e) => {
     const [, end] = state.domain;

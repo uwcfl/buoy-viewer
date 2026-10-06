@@ -74,12 +74,14 @@ async function mendotaFetchRaw(d) {
 
 initBuoyApp({
   cacheName: 'mendota',
+  lakeName: 'Lake_Mendota',
   depths: MENDOTA_DEPTHS,
   wtKeys: MENDOTA_WT_KEYS,
   simpleVars: MENDOTA_SIMPLE_VARS,
   groups: MENDOTA_GROUPS,
   earliest: new Date(new Date().getFullYear(), 3, 1), // April 1
   buoyImgSrc: 'assets/buoy.png',
+  buoyCoords: [43.0996009, -89.4206768],
   miniCardDepths: [0, 5, 10, 15, 20],
   // Preserve original defaults: voltage vars hidden, waterT hidden
   defaultVisible: [
