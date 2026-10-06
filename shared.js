@@ -1106,26 +1106,43 @@ function initBuoyApp(config) {
 
   /* ---------- CSV Download ---------- */
 
+  function toSnakeCase(str) {
+    return str
+      .replace(/°C|℃/gi, '_c')
+      .replace(/°/g, '_deg_')
+      .replace(/%/g, '_pct_')
+      .replace(/µ|μ/g, 'u')
+      .replace(/²/g, '2')
+      .replace(/³/g, '3')
+      .replace(/₂/g, '2')
+      .replace(/[./\\]/g, '_')
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
+  }
+
   function buildCsvColumns() {
     // Returns array of { header, getValue(rec) } for all currently visible vars
     const cols = [{ header: 'timestamp', getValue: r => fmtDate(r.timestamp) }];
     GROUPS.forEach(g => {
       if (!state.visible.has(g.key)) return;
       if (g.kind === 'simple') {
-        cols.push({ header: `${g.label} (${g.unit || ''})`.trim(), getValue: r => r[g.vkey] != null ? r[g.vkey] : '' });
+        const header = g.unit ? `${g.label} (${g.unit})` : g.label;
+        cols.push({ header: toSnakeCase(header), getValue: r => r[g.vkey] != null ? r[g.vkey] : '' });
       } else if (g.kind === 'profile') {
         DEPTHS.forEach((depth, i) => {
-          cols.push({ header: `Water Temp ${depth}m (°C)`, getValue: r => r[WT_KEYS[i]] != null ? r[WT_KEYS[i]] : '' });
+          cols.push({ header: toSnakeCase(`Water Temp ${depth}m (°C)`), getValue: r => r[WT_KEYS[i]] != null ? r[WT_KEYS[i]] : '' });
         });
       } else if (g.kind === 'do') {
-        cols.push({ header: 'DO Saturation (%)', getValue: r => r.do_sat != null ? r.do_sat : '' });
-        cols.push({ header: 'DO (mg/L)',          getValue: r => r.do_raw != null ? r.do_raw : '' });
+        cols.push({ header: toSnakeCase('DO Saturation (%)'), getValue: r => r.do_sat != null ? r.do_sat : '' });
+        cols.push({ header: toSnakeCase('DO (mg/L)'),          getValue: r => r.do_raw != null ? r.do_raw : '' });
       } else if (g.kind === 'par') {
-        cols.push({ header: 'PAR Above (µmol/m²/s)', getValue: r => r.PAR_above_Avg != null ? r.PAR_above_Avg : '' });
-        cols.push({ header: 'PAR Below (µmol/m²/s)', getValue: r => r.PAR_below_Avg != null ? r.PAR_below_Avg : '' });
+        cols.push({ header: toSnakeCase('PAR Above (µmol/m²/s)'), getValue: r => r.PAR_above_Avg != null ? r.PAR_above_Avg : '' });
+        cols.push({ header: toSnakeCase('PAR Below (µmol/m²/s)'), getValue: r => r.PAR_below_Avg != null ? r.PAR_below_Avg : '' });
       } else if (g.kind === 'wind') {
-        cols.push({ header: 'Wind Speed (m/s)',     getValue: r => r.wsL != null ? r.wsL : '' });
-        cols.push({ header: 'Wind Direction (°from)', getValue: r => r.wdL != null ? r.wdL : '' });
+        cols.push({ header: toSnakeCase('Wind Speed (m/s)'),     getValue: r => r.wsL != null ? r.wsL : '' });
+        cols.push({ header: toSnakeCase('Wind Direction (°from)'), getValue: r => r.wdL != null ? r.wdL : '' });
       }
     });
     return cols;
@@ -1149,7 +1166,7 @@ function initBuoyApp(config) {
     const rows = recs;
 
     const cols = buildCsvColumns();
-    const header = cols.map(c => `"${c.header.replace(/"/g, '""')}"`).join(',');
+    const header = cols.map(c => c.header).join(',');
     const body   = rows.map(r => cols.map(c => {
       const v = c.getValue(r);
       return v === '' ? '' : (typeof v === 'string' ? `"${v.replace(/"/g, '""')}"` : String(v));
