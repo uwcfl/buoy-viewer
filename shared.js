@@ -53,18 +53,18 @@ _today.setHours(23, 59, 59, 999);
 /* ---------- App Factory ---------- */
 
 function initBuoyApp(config) {
-  const DEPTHS        = config.depths;
-  const WT_KEYS       = config.wtKeys;
-  const SIMPLE_VARS   = config.simpleVars;
-  const GROUPS        = config.groups;
-  const EARLIEST      = config.earliest;
+  const DEPTHS = config.depths;
+  const WT_KEYS = config.wtKeys;
+  const SIMPLE_VARS = config.simpleVars;
+  const GROUPS = config.groups;
+  const EARLIEST = config.earliest;
   const MINI_CARD_DEPTHS = config.miniCardDepths;
-  const today         = _today;
+  const today = _today;
 
   /* ---------- Buoy Image ---------- */
 
   const buoyWrap = document.getElementById('buoyWrap');
-  const buoyImg  = document.getElementById('buoyImg');
+  const buoyImg = document.getElementById('buoyImg');
 
   if (config.buoyImgSrc && buoyWrap && buoyImg) {
     buoyImg.src = config.buoyImgSrc;
@@ -96,16 +96,16 @@ function initBuoyApp(config) {
     : new Set(GROUPS.map(g => g.key));
 
   const state = {
-    domain:               null,
-    visible:              defaultVis,
-    userToggled:          new Set(),
+    domain: null,
+    visible: defaultVis,
+    userToggled: new Set(),
     showCurrentConditions: true,
-    depthOn:              new Set(WT_KEYS),
-    doUnit:               'sat',   // 'sat' | 'raw'
-    windUnit:             'ms',    // 'ms' | 'mph'
-    wtProfileMode:        'heatmap', // 'lines' | 'heatmap'
-    cache:                new Map(), // dateStr → records[] | 'missing' | Promise
-    droppedDays:          new Set(), // dateStr of days after a 3+ day gap
+    depthOn: new Set(WT_KEYS),
+    doUnit: 'sat',   // 'sat' | 'raw'
+    windUnit: 'ms',    // 'ms' | 'mph'
+    wtProfileMode: 'heatmap', // 'lines' | 'heatmap'
+    cache: new Map(), // dateStr → records[] | 'missing' | Promise
+    droppedDays: new Set(), // dateStr of days after a 3+ day gap
   };
 
   /* ---------- Data Loading ---------- */
@@ -124,8 +124,8 @@ function initBuoyApp(config) {
         if (!isWithin48Hours && typeof caches !== 'undefined') {
           try {
             const webCache = await caches.open(`buoy-v1-${config.cacheName}`);
-            const fakeUrl  = `https://buoy-cache/${config.cacheName}/${key}`;
-            const cached   = await webCache.match(fakeUrl);
+            const fakeUrl = `https://buoy-cache/${config.cacheName}/${key}`;
+            const cached = await webCache.match(fakeUrl);
             if (cached) {
               const { fetchedAt, records: rawRecs } = await cached.json();
               if (Date.now() - fetchedAt <= MAX_CACHE_AGE_MS) {
@@ -142,7 +142,7 @@ function initBuoyApp(config) {
         if (records !== 'missing' && !isWithin48Hours && typeof caches !== 'undefined') {
           try {
             const webCache = await caches.open(`buoy-v1-${config.cacheName}`);
-            const fakeUrl  = `https://buoy-cache/${config.cacheName}/${key}`;
+            const fakeUrl = `https://buoy-cache/${config.cacheName}/${key}`;
             const body = JSON.stringify({
               fetchedAt: Date.now(),
               records: records.map(r => ({ ...r, timestamp: r.timestamp.toISOString() }))
@@ -177,7 +177,7 @@ function initBuoyApp(config) {
     let missingStreak = 0;
     for (const d of days) {
       const key = dateStr(d);
-      const v   = state.cache.get(key);
+      const v = state.cache.get(key);
       if (!v || v === 'missing') {
         missingStreak++;
       } else {
@@ -189,7 +189,7 @@ function initBuoyApp(config) {
     let recs = [];
     for (const d of days) {
       const key = dateStr(d);
-      const v   = state.cache.get(key);
+      const v = state.cache.get(key);
       if (v && v !== 'missing' && !state.droppedDays.has(key)) recs = recs.concat(v);
     }
     recs.sort((a, b) => a.timestamp - b.timestamp);
@@ -209,26 +209,26 @@ function initBuoyApp(config) {
   /* ---------- Binning ---------- */
 
   function binMinutesFor(spanDays) {
-    if (spanDays <= 2)   return 5;
-    if (spanDays <= 10)  return 15;
-    if (spanDays <= 35)  return 60;
+    if (spanDays <= 2) return 5;
+    if (spanDays <= 10) return 15;
+    if (spanDays <= 35) return 60;
     if (spanDays <= 120) return 360;
     if (spanDays <= 400) return 1440;
     return 10080;
   }
 
   function binLabel(mins) {
-    if (mins < 60)    return `${mins}-minute averages`;
-    if (mins < 1440)  return `${mins / 60}-hour averages`;
+    if (mins < 60) return `${mins}-minute averages`;
+    if (mins < 1440) return `${mins / 60}-hour averages`;
     if (mins < 10080) return `${mins / 1440}-day averages`;
     return 'weekly averages';
   }
 
   function binRecords(records, minutes, circularKeys = new Set()) {
     const binMs = minutes * 60000;
-    const bins  = new Map();
+    const bins = new Map();
     for (const r of records) {
-      const t      = r.timestamp.getTime();
+      const t = r.timestamp.getTime();
       const bStart = Math.floor(t / binMs) * binMs;
       let b = bins.get(bStart);
       if (!b) { b = { time: new Date(bStart), sum: {}, sin: {}, cos: {}, count: {} }; bins.set(bStart, b); }
@@ -263,8 +263,8 @@ function initBuoyApp(config) {
   /* ---------- Rendering Helpers ---------- */
 
   const chartsEl = d3.select('#charts');
-  const tooltip  = d3.select('body').append('div').attr('class', 'tooltip').style('display', 'none');
-  const MARGIN   = { top: 8, right: 16, bottom: 22, left: 46 };
+  const tooltip = d3.select('body').append('div').attr('class', 'tooltip').style('display', 'none');
+  const MARGIN = { top: 8, right: 16, bottom: 22, left: 46 };
   const MS_TO_MPH = 2.23694;
 
   function fmtDate(d) { return d3.timeFormat('%Y-%m-%d %H:%M')(d); }
@@ -284,39 +284,59 @@ function initBuoyApp(config) {
     return null;
   }
 
+  // Max distance (m) a reading may be extended/interpolated away from a working
+  // sensor when neighbouring sensors are missing (e.g. failed thermistors).
+  const MAX_INTERP_GAP_M = 2;
+
   function interpolateTempAtDepth(rec, targetDepth) {
-    let lowerDepth = null, lowerTemp = null;
-    let upperDepth = null, upperTemp = null;
+    let lowerIdx = -1, upperIdx = -1;
     for (let i = 0; i < DEPTHS.length; i++) {
-      const dep = DEPTHS[i];
-      const val = rec[WT_KEYS[i]];
-      if (val == null) continue;
-      if (dep <= targetDepth) { lowerDepth = dep; lowerTemp = val; }
-      if (dep >= targetDepth && upperDepth == null) { upperDepth = dep; upperTemp = val; break; }
+      if (rec[WT_KEYS[i]] == null) continue;
+      if (DEPTHS[i] <= targetDepth) lowerIdx = i;
+      if (DEPTHS[i] >= targetDepth) { upperIdx = i; break; }
     }
-    if (lowerTemp != null && upperTemp != null) {
+    const hasLower = lowerIdx >= 0, hasUpper = upperIdx >= 0;
+
+    if (hasLower && hasUpper) {
+      const lowerDepth = DEPTHS[lowerIdx], upperDepth = DEPTHS[upperIdx];
+      const lowerTemp = rec[WT_KEYS[lowerIdx]], upperTemp = rec[WT_KEYS[upperIdx]];
       if (lowerDepth === upperDepth) return lowerTemp;
-      const frac = (targetDepth - lowerDepth) / (upperDepth - lowerDepth);
-      return lowerTemp + frac * (upperTemp - lowerTemp);
+      // Adjacent sensors both working: interpolate across the normal spacing.
+      // Otherwise sensors in between are missing, so only trust the span if the
+      // target is close to the working sensors on both sides.
+      const adjacent = upperIdx - lowerIdx === 1;
+      const dLow = targetDepth - lowerDepth, dUp = upperDepth - targetDepth;
+      if (adjacent || (dLow <= MAX_INTERP_GAP_M && dUp <= MAX_INTERP_GAP_M)) {
+        return lowerTemp + (dLow / (upperDepth - lowerDepth)) * (upperTemp - lowerTemp);
+      }
+      // Gap too large: fall back to the nearest side only if it is close enough.
+      if (dLow <= MAX_INTERP_GAP_M && dLow <= dUp) return lowerTemp;
+      if (dUp <= MAX_INTERP_GAP_M) return upperTemp;
+      if (dLow <= MAX_INTERP_GAP_M) return lowerTemp;
+      return null;
     }
-    if (lowerTemp != null) return lowerTemp;
-    if (upperTemp != null) return upperTemp;
+    if (hasLower) {
+      return (targetDepth - DEPTHS[lowerIdx] <= MAX_INTERP_GAP_M) ? rec[WT_KEYS[lowerIdx]] : null;
+    }
+    if (hasUpper) {
+      return (DEPTHS[upperIdx] - targetDepth <= MAX_INTERP_GAP_M) ? rec[WT_KEYS[upperIdx]] : null;
+    }
     return null;
   }
 
   function getCompassDirection(deg) {
-    const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
     return dirs[Math.floor((deg / 22.5) + 0.5) % 16];
   }
 
   function makeSvg(container, height) {
-    const width  = container.node().clientWidth || 700;
-    const svg    = container.append('svg').attr('class', 'chart').attr('viewBox', `0 0 ${width} ${height}`);
+    const width = container.node().clientWidth || 700;
+    const svg = container.append('svg').attr('class', 'chart').attr('viewBox', `0 0 ${width} ${height}`);
     const clipId = 'clip-' + Math.random().toString(36).substring(2, 9);
     svg.append('defs').append('clipPath').attr('id', clipId).append('rect')
       .attr('x', MARGIN.left).attr('y', MARGIN.top)
-      .attr('width',  Math.max(0, width  - MARGIN.left - MARGIN.right))
-      .attr('height', Math.max(0, height - MARGIN.top  - MARGIN.bottom));
+      .attr('width', Math.max(0, width - MARGIN.left - MARGIN.right))
+      .attr('height', Math.max(0, height - MARGIN.top - MARGIN.bottom));
     return { svg, width, height, clipId };
   }
 
@@ -350,8 +370,8 @@ function initBuoyApp(config) {
 
     const overlay = svg.append('rect').attr('class', 'interaction-overlay')
       .attr('x', MARGIN.left).attr('y', MARGIN.top)
-      .attr('width',  width  - MARGIN.left - MARGIN.right)
-      .attr('height', height - MARGIN.top  - MARGIN.bottom)
+      .attr('width', width - MARGIN.left - MARGIN.right)
+      .attr('height', height - MARGIN.top - MARGIN.bottom)
       .attr('fill', 'transparent').style('cursor', 'grab').style('touch-action', 'none');
 
     const activePointers = new Map();
@@ -363,7 +383,7 @@ function initBuoyApp(config) {
       return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
     }
     function getPointerCenter() {
-      const pts  = Array.from(activePointers.values());
+      const pts = Array.from(activePointers.values());
       const rect = overlay.node().getBoundingClientRect();
       return ((pts[0].x + pts[1].x) / 2) - rect.left;
     }
@@ -372,10 +392,10 @@ function initBuoyApp(config) {
       if (isDragging || activePointers.size > 0) {
         guide.style('display', 'none'); tooltip.style('display', 'none'); return;
       }
-      const date   = x.invert(pointerX);
+      const date = x.invert(pointerX);
       const bisect = d3.bisector(d => d.time).left;
-      const i      = bisect(panelData, date);
-      const d      = panelData[Math.max(0, Math.min(panelData.length - 1, i))];
+      const i = bisect(panelData, date);
+      const d = panelData[Math.max(0, Math.min(panelData.length - 1, i))];
       if (!d) return;
       guide.attr('x1', x(d.time)).attr('x2', x(d.time)).style('display', null);
       let html = `<b>${fmtDate(d.time)}</b><br>`;
@@ -400,7 +420,7 @@ function initBuoyApp(config) {
           startDomain = state.domain ? [new Date(state.domain[0]), new Date(state.domain[1])] : null;
         } else if (activePointers.size === 2) {
           isDragging = true;
-          initialPinchDist   = getPointerDistance();
+          initialPinchDist = getPointerDistance();
           initialPinchCenter = getPointerCenter();
           startDomain = state.domain ? [new Date(state.domain[0]), new Date(state.domain[1])] : null;
           guide.style('display', 'none'); tooltip.style('display', 'none');
@@ -416,16 +436,16 @@ function initBuoyApp(config) {
           const currentDist = getPointerDistance();
           if (currentDist <= 0) return;
           const factor = initialPinchDist / currentDist;
-          const span   = startDomain[1] - startDomain[0];
-          let newSpan  = Math.max(span * factor, 1000 * 60 * 60 * 6);
-          newSpan      = Math.min(newSpan, today - EARLIEST);
-          const xBase  = xScaleFor(width);
+          const span = startDomain[1] - startDomain[0];
+          let newSpan = Math.max(span * factor, 1000 * 60 * 60 * 6);
+          newSpan = Math.min(newSpan, today - EARLIEST);
+          const xBase = xScaleFor(width);
           const focalDate = xBase.invert(initialPinchCenter);
-          const ratio  = (focalDate - startDomain[0]) / span;
+          const ratio = (focalDate - startDomain[0]) / span;
           let newStart = new Date(focalDate.getTime() - ratio * newSpan);
-          let newEnd   = new Date(focalDate.getTime() + (1 - ratio) * newSpan);
+          let newEnd = new Date(focalDate.getTime() + (1 - ratio) * newSpan);
           if (newStart < EARLIEST) { newEnd = new Date(newEnd.getTime() + (EARLIEST - newStart)); newStart = new Date(EARLIEST); }
-          if (newEnd   > today)    { newStart = new Date(newStart.getTime() - (newEnd - today));  newEnd   = new Date(today); }
+          if (newEnd > today) { newStart = new Date(newStart.getTime() - (newEnd - today)); newEnd = new Date(today); }
           state.domain = [newStart, newEnd];
           updateAllCharts(); scheduleRender(); return;
         }
@@ -435,13 +455,13 @@ function initBuoyApp(config) {
           if (Math.abs(dx) > 3) { isDragging = true; overlay.style('cursor', 'grabbing'); guide.style('display', 'none'); tooltip.style('display', 'none'); }
           if (isDragging) {
             const plotWidth = width - MARGIN.left - MARGIN.right;
-            const msPerPx   = (startDomain[1] - startDomain[0]) / plotWidth;
-            const dt        = dx * msPerPx;
+            const msPerPx = (startDomain[1] - startDomain[0]) / plotWidth;
+            const dt = dx * msPerPx;
             let newStart = new Date(startDomain[0].getTime() - dt);
-            let newEnd   = new Date(startDomain[1].getTime() - dt);
-            const span   = startDomain[1] - startDomain[0];
+            let newEnd = new Date(startDomain[1].getTime() - dt);
+            const span = startDomain[1] - startDomain[0];
             if (newStart < EARLIEST) { newStart = new Date(EARLIEST); newEnd = new Date(EARLIEST.getTime() + span); }
-            if (newEnd   > today)    { newEnd = new Date(today); newStart = new Date(today.getTime() - span); }
+            if (newEnd > today) { newEnd = new Date(today); newStart = new Date(today.getTime() - span); }
             state.domain = [newStart, newEnd];
             updateAllCharts(); scheduleRender(); return;
           }
@@ -451,7 +471,7 @@ function initBuoyApp(config) {
       })
       .on('pointerup pointercancel', (event) => {
         if (activePointers.has(event.pointerId)) {
-          try { overlay.node().releasePointerCapture(event.pointerId); } catch (_) {}
+          try { overlay.node().releasePointerCapture(event.pointerId); } catch (_) { }
           activePointers.delete(event.pointerId);
         }
         if (activePointers.size === 0) { isDragging = false; overlay.style('cursor', 'grab'); }
@@ -469,8 +489,8 @@ function initBuoyApp(config) {
 
     const overlay = svg.append('rect').attr('class', 'interaction-overlay')
       .attr('x', MARGIN.left).attr('y', MARGIN.top)
-      .attr('width',  width  - MARGIN.left - MARGIN.right)
-      .attr('height', height - MARGIN.top  - MARGIN.bottom)
+      .attr('width', width - MARGIN.left - MARGIN.right)
+      .attr('height', height - MARGIN.top - MARGIN.bottom)
       .attr('fill', 'transparent').style('cursor', 'grab').style('touch-action', 'none');
 
     const activePointers = new Map();
@@ -480,19 +500,19 @@ function initBuoyApp(config) {
       if (isDragging || activePointers.size > 0) {
         vLine.style('display', 'none'); hLine.style('display', 'none'); tooltip.style('display', 'none'); return;
       }
-      const date   = x.invert(pointerX);
+      const date = x.invert(pointerX);
       const bisect = d3.bisector(d => d.time).left;
-      const i      = bisect(panelData, date);
-      const d      = panelData[Math.max(0, Math.min(panelData.length - 1, i))];
+      const i = bisect(panelData, date);
+      const d = panelData[Math.max(0, Math.min(panelData.length - 1, i))];
       if (!d) return;
       const targetDepth = Math.max(0, Math.min(maxDepth, y.invert(pointerY)));
-      const temp        = interpolateTempAtDepth(d, targetDepth);
+      const temp = interpolateTempAtDepth(d, targetDepth);
       vLine.attr('x1', x(d.time)).attr('x2', x(d.time)).style('display', null);
       hLine.attr('y1', pointerY).attr('y2', pointerY).style('display', null);
       const html = `<b>${fmtDate(d.time)}</b><br>Depth: ${targetDepth.toFixed(1)} m<br>Temp: ${temp != null ? temp.toFixed(2) + ' \u00b0C' : '\u2013'}`;
       tooltip.style('display', null).html(html);
-      const tw  = tooltip.node().offsetWidth;
-      const lp  = pageX > window.innerWidth * (2 / 3) ? pageX - tw - 12 : pageX + 12;
+      const tw = tooltip.node().offsetWidth;
+      const lp = pageX > window.innerWidth * (2 / 3) ? pageX - tw - 12 : pageX + 12;
       tooltip.style('left', lp + 'px').style('top', (pageY - 20) + 'px');
     }
 
@@ -514,13 +534,13 @@ function initBuoyApp(config) {
           if (Math.abs(dx) > 3) { isDragging = true; overlay.style('cursor', 'grabbing'); vLine.style('display', 'none'); hLine.style('display', 'none'); tooltip.style('display', 'none'); }
           if (isDragging) {
             const plotWidth = width - MARGIN.left - MARGIN.right;
-            const msPerPx   = (startDomain[1] - startDomain[0]) / plotWidth;
-            const dt        = dx * msPerPx;
+            const msPerPx = (startDomain[1] - startDomain[0]) / plotWidth;
+            const dt = dx * msPerPx;
             let newStart = new Date(startDomain[0].getTime() - dt);
-            let newEnd   = new Date(startDomain[1].getTime() - dt);
-            const span   = startDomain[1] - startDomain[0];
+            let newEnd = new Date(startDomain[1].getTime() - dt);
+            const span = startDomain[1] - startDomain[0];
             if (newStart < EARLIEST) { newStart = new Date(EARLIEST); newEnd = new Date(EARLIEST.getTime() + span); }
-            if (newEnd   > today)    { newEnd = new Date(today); newStart = new Date(today.getTime() - span); }
+            if (newEnd > today) { newEnd = new Date(today); newStart = new Date(today.getTime() - span); }
             state.domain = [newStart, newEnd];
             updateAllCharts(); scheduleRender(); return;
           }
@@ -529,7 +549,7 @@ function initBuoyApp(config) {
       })
       .on('pointerup pointercancel', (event) => {
         if (activePointers.has(event.pointerId)) {
-          try { overlay.node().releasePointerCapture(event.pointerId); } catch (_) {}
+          try { overlay.node().releasePointerCapture(event.pointerId); } catch (_) { }
           activePointers.delete(event.pointerId);
         }
         if (activePointers.size === 0) { isDragging = false; overlay.style('cursor', 'grab'); }
@@ -546,7 +566,7 @@ function initBuoyApp(config) {
     if (!latestRec) return;
 
     const section = chartsEl.append('div').attr('class', 'mini-cards-section');
-    const header  = section.append('div').attr('class', 'mini-cards-header');
+    const header = section.append('div').attr('class', 'mini-cards-header');
     header.append('div').attr('class', 'mini-cards-title').text('Current Conditions');
     header.append('div').attr('class', 'mini-cards-timestamp').text(`As of ${fmtDate(latestRec.timestamp)}`);
     const grid = section.append('div').attr('class', 'mini-cards-grid');
@@ -572,15 +592,15 @@ function initBuoyApp(config) {
           ut.append('button').text(u === 'sat' ? '%' : 'mg/L').classed('active', state.doUnit === u)
             .on('click', (e) => { e.stopPropagation(); state.doUnit = u; render(); });
         });
-        const key  = state.doUnit === 'sat' ? 'do_sat' : 'do_raw';
+        const key = state.doUnit === 'sat' ? 'do_sat' : 'do_raw';
         const unit = state.doUnit === 'sat' ? '%' : 'mg/L';
-        const val  = getLastValue(records, key);
+        const val = getLastValue(records, key);
         card.append('div').attr('class', 'mini-card-value').text(val != null ? `${val.toFixed(2)} ${unit}` : '\u2013');
       } else if (g.kind === 'par') {
         card.append('div').attr('class', 'mini-card-title').append('span').text(g.label);
         const subGrid = card.append('div').attr('class', 'mini-card-grid-values');
         [{ k: 'PAR_above_Avg', lbl: 'Above' }, { k: 'PAR_below_Avg', lbl: 'Below' }].forEach(({ k, lbl }) => {
-          const val  = getLastValue(records, k);
+          const val = getLastValue(records, k);
           const item = subGrid.append('div').attr('class', 'mini-card-grid-item');
           item.append('span').attr('class', 'mini-card-grid-label').text(lbl);
           item.append('span').attr('class', 'mini-card-grid-val').text(val != null ? `${val.toFixed(1)} \u00b5mol/m\u00b2/s` : '\u2013');
@@ -612,7 +632,7 @@ function initBuoyApp(config) {
         }
       } else if (g.kind === 'simple') {
         card.append('div').attr('class', 'mini-card-title').append('span').text(g.label);
-        const val     = getLastValue(records, g.vkey);
+        const val = getLastValue(records, g.vkey);
         const unitStr = g.unit ? ` ${g.unit}` : '';
         card.append('div').attr('class', 'mini-card-value').text(val != null ? `${val.toFixed(2)}${unitStr}` : '\u2013');
       }
@@ -622,12 +642,12 @@ function initBuoyApp(config) {
   /* ---------- Chart Renderers ---------- */
 
   function renderSimple(group, records, binned) {
-    const div    = panel(group);
+    const div = panel(group);
     const height = 160;
     const { svg, width, clipId } = makeSvg(div, height);
-    const x    = xScaleFor(width);
+    const x = xScaleFor(width);
     const vals = binned.map(d => d[group.vkey]).filter(v => v != null);
-    const y    = d3.scaleLinear()
+    const y = d3.scaleLinear()
       .domain(vals.length ? [d3.min(vals), d3.max(vals)] : [0, 1]).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
@@ -650,7 +670,7 @@ function initBuoyApp(config) {
   function renderProfile(group, records, binned) {
     const div = panel(group);
     const top = div.select('.chart-title-row');
-    const ut  = top.append('div').attr('class', 'unit-toggle');
+    const ut = top.append('div').attr('class', 'unit-toggle');
     [{ id: 'lines', label: 'Lines' }, { id: 'heatmap', label: 'Heatmap' }].forEach(m => {
       ut.append('button').text(m.label).classed('active', state.wtProfileMode === m.id)
         .on('click', () => { state.wtProfileMode = m.id; render(); });
@@ -661,12 +681,12 @@ function initBuoyApp(config) {
 
   function renderProfileLines(div, group, records, binned) {
     const maxDepth = DEPTHS[DEPTHS.length - 1];
-    const dt       = div.append('div').attr('class', 'depth-toggles');
-    const color    = d3.scaleLinear().domain([0, maxDepth]).range(['#72bcd4', '#0b3d4c']);
+    const dt = div.append('div').attr('class', 'depth-toggles');
+    const color = d3.scaleLinear().domain([0, maxDepth]).range(['#72bcd4', '#0b3d4c']);
 
     DEPTHS.forEach((depth, i) => {
       const key = WT_KEYS[i];
-      const on  = state.depthOn.has(key);
+      const on = state.depthOn.has(key);
       dt.append('span').attr('class', 'depth-swatch' + (on ? '' : ' off'))
         .style('background', color(depth)).text(`${depth}m`)
         .on('click', function () {
@@ -675,9 +695,9 @@ function initBuoyApp(config) {
         });
     });
 
-    const height     = 220;
+    const height = 220;
     const { svg, width, clipId } = makeSvg(div, height);
-    const x          = xScaleFor(width);
+    const x = xScaleFor(width);
     const activeKeys = WT_KEYS.filter(k => state.depthOn.has(k));
     let allVals = [];
     binned.forEach(d => activeKeys.forEach(k => { if (d[k] != null) allVals.push(d[k]); }));
@@ -687,7 +707,7 @@ function initBuoyApp(config) {
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub')
       .text('\u00b0C \u2014 color = depth (light blue = shallow, deep blue = deep)');
 
-    const plotArea  = svg.append('g').attr('clip-path', `url(#${clipId})`);
+    const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
     const seriesInfo = [];
     activeKeys.forEach((k, idx) => {
       const depth = DEPTHS[WT_KEYS.indexOf(k)];
@@ -735,8 +755,8 @@ function initBuoyApp(config) {
       .style('width', `${width}px`).style('height', `${height}px`).style('pointer-events', 'none')
       .attr('width', width).attr('height', height);
     const ctx = canvas.node().getContext('2d');
-    const x   = xScaleFor(width);
-    const y   = d3.scaleLinear().domain([0, maxDepth]).range([MARGIN.top, height - MARGIN.bottom]);
+    const x = xScaleFor(width);
+    const y = d3.scaleLinear().domain([0, maxDepth]).range([MARGIN.top, height - MARGIN.bottom]);
 
     svg.append('g').attr('class', 'axis axis-bottom')
       .attr('transform', `translate(0,${height - MARGIN.bottom})`)
@@ -746,27 +766,27 @@ function initBuoyApp(config) {
       .call(d3.axisLeft(y).ticks(5).tickFormat(d => `${d}m`));
 
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub')
-      .text('Temperatures are interpolated between sensors.');
+      .text('Temperatures are interpolated between sensors; areas more than 2 m from a working sensor are left blank.');
 
     const T = binned.length;
     const D = 100;
     if (T > 0) {
-      const offCanvas    = document.createElement('canvas');
-      offCanvas.width    = T; offCanvas.height = D;
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = T; offCanvas.height = D;
       const offCtx = offCanvas.getContext('2d');
       const imgData = offCtx.createImageData(T, D);
 
       for (let row = 0; row < D; row++) {
         const targetDepth = (row / (D - 1)) * maxDepth;
         for (let col = 0; col < T; col++) {
-          const rec      = binned[col];
-          const temp     = interpolateTempAtDepth(rec, targetDepth);
+          const rec = binned[col];
+          const temp = interpolateTempAtDepth(rec, targetDepth);
           const pixelIdx = (row * T + col) * 4;
           if (temp == null) {
             imgData.data[pixelIdx + 3] = 0;
           } else {
             const c = d3.rgb(colorScale(temp));
-            imgData.data[pixelIdx]     = c.r;
+            imgData.data[pixelIdx] = c.r;
             imgData.data[pixelIdx + 1] = c.g;
             imgData.data[pixelIdx + 2] = c.b;
             imgData.data[pixelIdx + 3] = 255;
@@ -776,18 +796,18 @@ function initBuoyApp(config) {
       offCtx.putImageData(imgData, 0, 0);
 
       const drawHeatmap = (xScale) => {
-        const plotWidth  = width  - MARGIN.left - MARGIN.right;
-        const plotHeight = height - MARGIN.top  - MARGIN.bottom;
+        const plotWidth = width - MARGIN.left - MARGIN.right;
+        const plotHeight = height - MARGIN.top - MARGIN.bottom;
         ctx.clearRect(0, 0, width, height);
         ctx.save();
         ctx.beginPath(); ctx.rect(MARGIN.left, MARGIN.top, plotWidth, plotHeight); ctx.clip();
         for (let i = 0; i < T; i++) {
           const x0 = xScale(binned[i].time);
-          let   x1 = (i < T - 1) ? xScale(binned[i + 1].time) : x0 + (x0 - xScale(binned[Math.max(0, i - 1)].time));
+          let x1 = (i < T - 1) ? xScale(binned[i + 1].time) : x0 + (x0 - xScale(binned[Math.max(0, i - 1)].time));
           if (x1 <= x0) x1 = x0 + 1;
           if (x1 < MARGIN.left || x0 > width - MARGIN.right) continue;
           const x0Floor = Math.floor(x0);
-          const drawW   = Math.max(1, Math.ceil(x1) - x0Floor + 1);
+          const drawW = Math.max(1, Math.ceil(x1) - x0Floor + 1);
           ctx.drawImage(offCanvas, i, 0, 1, D, x0Floor, MARGIN.top, drawW, plotHeight);
         }
         ctx.restore();
@@ -807,18 +827,18 @@ function initBuoyApp(config) {
   function renderDO(group, records, binned) {
     const div = panel(group);
     const top = div.select('.chart-title-row');
-    const ut  = top.append('div').attr('class', 'unit-toggle');
+    const ut = top.append('div').attr('class', 'unit-toggle');
     ['sat', 'raw'].forEach(u => {
       ut.append('button').text(u === 'sat' ? '%' : 'mg/L').classed('active', state.doUnit === u)
         .on('click', () => { state.doUnit = u; render(); });
     });
-    const key    = state.doUnit === 'sat' ? 'do_sat' : 'do_raw';
-    const unit   = state.doUnit === 'sat' ? '%' : 'mg/L';
+    const key = state.doUnit === 'sat' ? 'do_sat' : 'do_raw';
+    const unit = state.doUnit === 'sat' ? '%' : 'mg/L';
     const height = 160;
     const { svg, width, clipId } = makeSvg(div, height);
-    const x    = xScaleFor(width);
+    const x = xScaleFor(width);
     const vals = binned.map(d => d[key]).filter(v => v != null);
-    const y    = d3.scaleLinear().domain(vals.length ? [d3.min(vals), d3.max(vals)] : [0, 1]).nice()
+    const y = d3.scaleLinear().domain(vals.length ? [d3.min(vals), d3.max(vals)] : [0, 1]).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub').text(unit);
@@ -838,10 +858,10 @@ function initBuoyApp(config) {
   }
 
   function renderPAR(group, records, binned) {
-    const div    = panel(group);
+    const div = panel(group);
     const height = 160;
     const { svg, width, clipId } = makeSvg(div, height);
-    const x    = xScaleFor(width);
+    const x = xScaleFor(width);
     const keys = [
       { k: 'PAR_above_Avg', label: 'Above water', color: '#d97a3c' },
       { k: 'PAR_below_Avg', label: 'Below water', color: '#14708c' }
@@ -873,28 +893,28 @@ function initBuoyApp(config) {
   }
 
   function renderWind(group, records, binned, mins) {
-    const div    = panel(group);
-    const top    = div.select('.chart-title-row');
-    const ut     = top.append('div').attr('class', 'unit-toggle');
+    const div = panel(group);
+    const top = div.select('.chart-title-row');
+    const ut = top.append('div').attr('class', 'unit-toggle');
     ['ms', 'mph'].forEach(u => {
       ut.append('button').text(u === 'ms' ? 'm/s' : 'mph').classed('active', state.windUnit === u)
         .on('click', () => { state.windUnit = u; render(); });
     });
-    const isMph     = state.windUnit === 'mph';
-    const unit      = isMph ? 'mph' : 'm/s';
+    const isMph = state.windUnit === 'mph';
+    const unit = isMph ? 'mph' : 'm/s';
     const speedMult = isMph ? MS_TO_MPH : 1;
 
     const height = 170;
     const { svg, width, clipId } = makeSvg(div, height);
-    const x    = xScaleFor(width);
+    const x = xScaleFor(width);
     const vals = binned.map(d => d.wsL != null ? d.wsL * speedMult : null).filter(v => v != null);
-    const y    = d3.scaleLinear().domain([0, vals.length ? d3.max(vals) : 1]).nice()
+    const y = d3.scaleLinear().domain([0, vals.length ? d3.max(vals) : 1]).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
 
     const plotWidth = width - MARGIN.left - MARGIN.right;
     const maxArrows = Math.max(1, Math.floor(plotWidth / 22));
-    const step      = Math.max(1, Math.ceil(binned.length / maxArrows));
+    const step = Math.max(1, Math.ceil(binned.length / maxArrows));
 
     const arrowPts = [];
     for (let i = 0; i < binned.length; i += step) {
@@ -1034,7 +1054,7 @@ function initBuoyApp(config) {
   function updateAllCharts() {
     if (!state.domain) return;
     document.getElementById('startDate').value = dateStr(state.domain[0]);
-    document.getElementById('endDate').value   = dateStr(state.domain[1]);
+    document.getElementById('endDate').value = dateStr(state.domain[1]);
     chartsEl.selectAll('.chart-panel').each(function () { if (this._updateX) this._updateX(); });
   }
 
@@ -1052,7 +1072,7 @@ function initBuoyApp(config) {
     const token = ++renderToken;
     const [start, end] = state.domain;
     document.getElementById('startDate').value = dateStr(start);
-    document.getElementById('endDate').value   = dateStr(end);
+    document.getElementById('endDate').value = dateStr(end);
 
     const records = await loadRange(start, end);
     if (token !== renderToken) return;
@@ -1069,14 +1089,14 @@ function initBuoyApp(config) {
     }
 
     const spanDays = (end - start) / 86400000;
-    const mins     = binMinutesFor(spanDays);
+    const mins = binMinutesFor(spanDays);
     document.getElementById('binNote').textContent = `Showing ${binLabel(mins)}`;
 
     const binned = binRecords(records, mins, new Set(['wdL']));
 
     buildToggles();
 
-    const savedScrollY  = window.scrollY;
+    const savedScrollY = window.scrollY;
     const currentHeight = chartsEl.node().offsetHeight;
     if (currentHeight > 0) chartsEl.style('min-height', `${currentHeight}px`);
 
@@ -1086,11 +1106,11 @@ function initBuoyApp(config) {
 
     GROUPS.forEach(g => {
       if (!state.visible.has(g.key)) return;
-      if (g.kind === 'simple')  renderSimple(g, records, binned);
+      if (g.kind === 'simple') renderSimple(g, records, binned);
       else if (g.kind === 'profile') renderProfile(g, records, binned);
-      else if (g.kind === 'do')      renderDO(g, records, binned);
-      else if (g.kind === 'par')     renderPAR(g, records, binned);
-      else if (g.kind === 'wind')    renderWind(g, records, binned, mins);
+      else if (g.kind === 'do') renderDO(g, records, binned);
+      else if (g.kind === 'par') renderPAR(g, records, binned);
+      else if (g.kind === 'wind') renderWind(g, records, binned, mins);
     });
 
     window.scrollTo(0, savedScrollY);
@@ -1099,7 +1119,7 @@ function initBuoyApp(config) {
 
   function setDomain(start, end, doRender) {
     if (start < EARLIEST) start = new Date(EARLIEST);
-    if (end   > today)    end   = new Date(today);
+    if (end > today) end = new Date(today);
     state.domain = [start, end];
     if (doRender) render();
   }
@@ -1136,12 +1156,12 @@ function initBuoyApp(config) {
         });
       } else if (g.kind === 'do') {
         cols.push({ header: toSnakeCase('DO Saturation (%)'), getValue: r => r.do_sat != null ? r.do_sat : '' });
-        cols.push({ header: toSnakeCase('DO (mg/L)'),          getValue: r => r.do_raw != null ? r.do_raw : '' });
+        cols.push({ header: toSnakeCase('DO (mg/L)'), getValue: r => r.do_raw != null ? r.do_raw : '' });
       } else if (g.kind === 'par') {
         cols.push({ header: toSnakeCase('PAR Above (µmol/m²/s)'), getValue: r => r.PAR_above_Avg != null ? r.PAR_above_Avg : '' });
         cols.push({ header: toSnakeCase('PAR Below (µmol/m²/s)'), getValue: r => r.PAR_below_Avg != null ? r.PAR_below_Avg : '' });
       } else if (g.kind === 'wind') {
-        cols.push({ header: toSnakeCase('Wind Speed (m/s)'),     getValue: r => r.wsL != null ? r.wsL : '' });
+        cols.push({ header: toSnakeCase('Wind Speed (m/s)'), getValue: r => r.wsL != null ? r.wsL : '' });
         cols.push({ header: toSnakeCase('Wind Direction (°from)'), getValue: r => r.wdL != null ? r.wdL : '' });
       }
     });
@@ -1155,10 +1175,10 @@ function initBuoyApp(config) {
     // Collect all cached records for the domain at original resolution
     let recs = [];
     for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-         d <= end; d.setDate(d.getDate() + 1)) {
+      d <= end; d.setDate(d.getDate() + 1)) {
       if (d < EARLIEST) continue;
       const key = dateStr(d);
-      const v   = state.cache.get(key);
+      const v = state.cache.get(key);
       if (v && v !== 'missing' && !state.droppedDays.has(key)) recs = recs.concat(v);
     }
     recs.sort((a, b) => a.timestamp - b.timestamp);
@@ -1167,19 +1187,19 @@ function initBuoyApp(config) {
 
     const cols = buildCsvColumns();
     const header = cols.map(c => c.header).join(',');
-    const body   = rows.map(r => cols.map(c => {
+    const body = rows.map(r => cols.map(c => {
       const v = c.getValue(r);
       return v === '' ? '' : (typeof v === 'string' ? `"${v.replace(/"/g, '""')}"` : String(v));
     }).join(',')).join('\n');
 
-    const lakeName  = (config.lakeName || 'buoy').replace(/\s+/g, '_');
-    const startStr  = dateStr(start);
-    const endStr    = dateStr(end);
-    const filename  = `${lakeName}_${startStr}_to_${endStr}.csv`;
+    const lakeName = (config.lakeName || 'buoy').replace(/\s+/g, '_');
+    const startStr = dateStr(start);
+    const endStr = dateStr(end);
+    const filename = `${lakeName}_${startStr}_to_${endStr}.csv`;
 
     const blob = new Blob([header + '\n' + body], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
   }
@@ -1211,7 +1231,7 @@ function initBuoyApp(config) {
   document.querySelectorAll('.presets button').forEach(btn => {
     btn.addEventListener('click', () => {
       const days = btn.dataset.days;
-      const end  = new Date(today);
+      const end = new Date(today);
       const start = days === 'all' ? new Date(EARLIEST) : new Date(end.getTime() - days * 86400000);
       start.setHours(0, 0, 0, 0);
       setDomain(start, end, true);
@@ -1224,7 +1244,7 @@ function initBuoyApp(config) {
 
   (async function init() {
     const latest = await findLatestAvailable();
-    const start  = new Date(latest.getTime() - 3 * 86400000);
+    const start = new Date(latest.getTime() - 3 * 86400000);
     start.setHours(0, 0, 0, 0);
     setDomain(start, latest, true);
   })();
