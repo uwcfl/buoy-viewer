@@ -47,8 +47,17 @@ function dateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
-const _today = toChicago(new Date());
-_today.setHours(23, 59, 59, 999);
+// Current time as a Chicago wall-clock Date (same convention as record timestamps)
+function nowChicago() {
+  return toChicago(new Date());
+}
+
+// End of the current Chicago day (used for day-granular loading, not for axis limits)
+function endOfTodayChicago() {
+  const d = nowChicago();
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
 
 /* ---------- App Factory ---------- */
 
@@ -59,7 +68,6 @@ function initBuoyApp(config) {
   const GROUPS = config.groups;
   const EARLIEST = config.earliest;
   const MINI_CARD_DEPTHS = config.miniCardDepths;
-  const today = _today;
 
   /* ---------- Buoy Image ---------- */
 
@@ -118,7 +126,7 @@ function initBuoyApp(config) {
 
     const loadPromise = (async () => {
       try {
-        const isWithin48Hours = (today.getTime() - d.getTime()) < MAX_CACHE_AGE_MS;
+        const isWithin48Hours = (nowChicago().getTime() - d.getTime()) < MAX_CACHE_AGE_MS;
 
         // Try persistent web cache for older days
         if (!isWithin48Hours && typeof caches !== 'undefined') {
@@ -197,13 +205,13 @@ function initBuoyApp(config) {
   }
 
   async function findLatestAvailable() {
-    let d = new Date(today);
+    let d = endOfTodayChicago();
     for (let i = 0; i < 400 && d >= EARLIEST; i++) {
       const v = await loadDay(d);
       if (v !== 'missing' && v.length) return new Date(d);
       d.setDate(d.getDate() - 1);
     }
-    return new Date(today);
+    return endOfTodayChicago();
   }
 
   /* ---------- Binning ---------- */
@@ -438,14 +446,15 @@ function initBuoyApp(config) {
           const factor = initialPinchDist / currentDist;
           const span = startDomain[1] - startDomain[0];
           let newSpan = Math.max(span * factor, 1000 * 60 * 60 * 6);
-          newSpan = Math.min(newSpan, today - EARLIEST);
+          newSpan = Math.min(newSpan, nowChicago() - EARLIEST);
           const xBase = xScaleFor(width);
           const focalDate = xBase.invert(initialPinchCenter);
           const ratio = (focalDate - startDomain[0]) / span;
           let newStart = new Date(focalDate.getTime() - ratio * newSpan);
           let newEnd = new Date(focalDate.getTime() + (1 - ratio) * newSpan);
           if (newStart < EARLIEST) { newEnd = new Date(newEnd.getTime() + (EARLIEST - newStart)); newStart = new Date(EARLIEST); }
-          if (newEnd > today) { newStart = new Date(newStart.getTime() - (newEnd - today)); newEnd = new Date(today); }
+          const maxEnd = nowChicago();
+          if (newEnd > maxEnd) { newStart = new Date(newStart.getTime() - (newEnd - maxEnd)); newEnd = maxEnd; }
           state.domain = [newStart, newEnd];
           updateAllCharts(); scheduleRender(); return;
         }
@@ -461,7 +470,8 @@ function initBuoyApp(config) {
             let newEnd = new Date(startDomain[1].getTime() - dt);
             const span = startDomain[1] - startDomain[0];
             if (newStart < EARLIEST) { newStart = new Date(EARLIEST); newEnd = new Date(EARLIEST.getTime() + span); }
-            if (newEnd > today) { newEnd = new Date(today); newStart = new Date(today.getTime() - span); }
+            const maxEnd = nowChicago();
+            if (newEnd > maxEnd) { newEnd = maxEnd; newStart = new Date(maxEnd.getTime() - span); }
             state.domain = [newStart, newEnd];
             updateAllCharts(); scheduleRender(); return;
           }
@@ -540,7 +550,8 @@ function initBuoyApp(config) {
             let newEnd = new Date(startDomain[1].getTime() - dt);
             const span = startDomain[1] - startDomain[0];
             if (newStart < EARLIEST) { newStart = new Date(EARLIEST); newEnd = new Date(EARLIEST.getTime() + span); }
-            if (newEnd > today) { newEnd = new Date(today); newStart = new Date(today.getTime() - span); }
+            const maxEnd = nowChicago();
+            if (newEnd > maxEnd) { newEnd = maxEnd; newStart = new Date(maxEnd.getTime() - span); }
             state.domain = [newStart, newEnd];
             updateAllCharts(); scheduleRender(); return;
           }
@@ -1119,7 +1130,8 @@ function initBuoyApp(config) {
 
   function setDomain(start, end, doRender) {
     if (start < EARLIEST) start = new Date(EARLIEST);
-    if (end > today) end = new Date(today);
+    const maxEnd = nowChicago();
+    if (end > maxEnd) end = maxEnd;
     state.domain = [start, end];
     if (doRender) render();
   }
@@ -1226,14 +1238,15 @@ function initBuoyApp(config) {
   });
   document.getElementById('endDate').addEventListener('change', (e) => {
     const [start] = state.domain;
-    setDomain(start, parseLocalDate(e.target.value), true);
+    const end = parseLocalDate(e.target.value);
+    end.setHours(23, 59, 59, 999); // include the whole selected end day (clamped to now)
+    setDomain(start, end, true);
   });
   document.querySelectorAll('.presets button').forEach(btn => {
     btn.addEventListener('click', () => {
       const days = btn.dataset.days;
-      const end = new Date(today);
+      const end = nowChicago();
       const start = days === 'all' ? new Date(EARLIEST) : new Date(end.getTime() - days * 86400000);
-      start.setHours(0, 0, 0, 0);
       setDomain(start, end, true);
     });
   });
