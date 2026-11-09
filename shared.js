@@ -652,6 +652,14 @@ function initBuoyApp(config) {
 
   /* ---------- Chart Renderers ---------- */
 
+  // Expand [lo, hi] symmetrically so it spans at least `span` units (water temp: 5 °C for lines, 10 °C for heatmap).
+  const MIN_WT_RANGE = 5;
+  function withMinRange(lo, hi, span = MIN_WT_RANGE) {
+    if (hi - lo >= span) return [lo, hi];
+    const mid = (lo + hi) / 2;
+    return [mid - span / 2, mid + span / 2];
+  }
+
   function renderSimple(group, records, binned) {
     const div = panel(group);
     const height = 160;
@@ -712,7 +720,7 @@ function initBuoyApp(config) {
     const activeKeys = WT_KEYS.filter(k => state.depthOn.has(k));
     let allVals = [];
     binned.forEach(d => activeKeys.forEach(k => { if (d[k] != null) allVals.push(d[k]); }));
-    const y = d3.scaleLinear().domain(allVals.length ? [d3.min(allVals), d3.max(allVals)] : [0, 30]).nice()
+    const y = d3.scaleLinear().domain(allVals.length ? withMinRange(d3.min(allVals), d3.max(allVals)) : [0, 30]).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub')
@@ -744,8 +752,7 @@ function initBuoyApp(config) {
     const maxDepth = DEPTHS[DEPTHS.length - 1];
     let allVals = [];
     binned.forEach(d => WT_KEYS.forEach(k => { if (d[k] != null) allVals.push(d[k]); }));
-    const minTemp = allVals.length ? d3.min(allVals) : 0;
-    const maxTemp = allVals.length ? d3.max(allVals) : 30;
+    const [minTemp, maxTemp] = allVals.length ? withMinRange(d3.min(allVals), d3.max(allVals), 10) : [0, 30];
 
     const legendDiv = div.append('div').attr('class', 'heatmap-legend')
       .style('display', 'flex').style('align-items', 'center').style('gap', '8px')
