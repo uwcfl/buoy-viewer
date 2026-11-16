@@ -80,6 +80,8 @@ initBuoyApp({
   simpleVars: MENDOTA_SIMPLE_VARS,
   groups: MENDOTA_GROUPS,
   earliest: new Date(new Date().getFullYear(), 3, 1), // April 1
+  forceWinterModal: false, // set true to always show the 'out for the winter' modal
+  offlineHours: 24, // hours without data before the 'buoy is offline' modal
   buoyImgSrc: 'assets/buoy.png',
   buoyCoords: [43.0995, -89.4045],
   miniCardDepths: [0, 5, 10, 15, 20],

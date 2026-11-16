@@ -12,7 +12,9 @@
  *   wtKeys:          string[],         // record keys for each depth (same length)
  *   simpleVars:      { [key]: { label, unit, voltage? } },
  *   groups:          Array<{ key, label, kind, vkey?, unit? }>,
- *   earliest:        Date,
+ *   earliest:        Date,             // season start; only its month/day are used
+ *   forceWinterModal: boolean,         // true → always show the "out for the winter" modal
+ *   offlineHours:    number,           // hours without data before the "offline" modal (default 24)
  *   buoyImgSrc:      string | null,    // null → hide buoy image
  *   buoyCoords:      [lat, lng] | null, // decimal coords → image links to Google Maps
  *   miniCardDepths:  number[],         // depths shown in "Current Conditions" card
@@ -66,7 +68,25 @@ function initBuoyApp(config) {
   const WT_KEYS = config.wtKeys;
   const SIMPLE_VARS = config.simpleVars;
   const GROUPS = config.groups;
-  const EARLIEST = config.earliest;
+
+  /* ---------- Viewing Season ----------
+   * From Jan 1 until the season start (buoy deployment), there is no current-year
+   * data, so the viewer shows the previous year's season instead.
+   */
+  const SEASON_MONTH = config.earliest.getMonth();
+  const SEASON_DAY = config.earliest.getDate();
+  const TODAY = nowChicago();
+  const PRE_SEASON = TODAY < new Date(TODAY.getFullYear(), SEASON_MONTH, SEASON_DAY);
+  const VIEW_YEAR = PRE_SEASON ? TODAY.getFullYear() - 1 : TODAY.getFullYear();
+  const EARLIEST = new Date(VIEW_YEAR, SEASON_MONTH, SEASON_DAY);
+  const SEASON_END = VIEW_YEAR < TODAY.getFullYear()
+    ? new Date(VIEW_YEAR, 11, 31, 23, 59, 59, 999)
+    : null;
+
+  // Latest time the viewer may show: now, or Dec 31 when viewing a past season
+  function latestBound() {
+    return SEASON_END || nowChicago();
+  }
   const MINI_CARD_DEPTHS = config.miniCardDepths;
 
   /* ---------- Buoy Image ---------- */
@@ -204,14 +224,78 @@ function initBuoyApp(config) {
     return recs;
   }
 
+  // Search backward (a week at a time, in parallel) for the most recent record.
+  // Returns the newest record timestamp, or null if the season has no data.
   async function findLatestAvailable() {
-    let d = endOfTodayChicago();
-    for (let i = 0; i < 400 && d >= EARLIEST; i++) {
-      const v = await loadDay(d);
-      if (v !== 'missing' && v.length) return new Date(d);
-      d.setDate(d.getDate() - 1);
+    const BATCH = 7;
+    let d = SEASON_END ? new Date(SEASON_END) : endOfTodayChicago();
+    for (let i = 0; i < 400 && d >= EARLIEST; i += BATCH) {
+      const days = [];
+      for (let j = 0; j < BATCH && d >= EARLIEST; j++) {
+        days.push(new Date(d));
+        d.setDate(d.getDate() - 1);
+      }
+      const results = await Promise.all(days.map(loadDay));
+      for (const v of results) {
+        if (v !== 'missing' && v.length) {
+          return v.reduce((max, r) => (r.timestamp > max ? r.timestamp : max), v[0].timestamp);
+        }
+      }
     }
-    return endOfTodayChicago();
+    return null;
+  }
+
+  /* ---------- No-Data Modals ---------- */
+
+  const OFFLINE_HOURS = config.offlineHours ?? 24;
+  const WINTER_DAYS = 7;
+
+  const ICON_OFFLINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 4.2-2.6M9.5 5.2A15 15 0 0 1 22 8.8"/><path d="M5 12.6a10 10 0 0 1 3.4-1.9M13.5 10.3A10 10 0 0 1 19 12.6"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="0.8" fill="currentColor"/><path d="M3 3l18 18"/></svg>';
+  const ICON_WINTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M4.2 6.5l15.6 9M4.2 17.5l15.6-9"/><path d="M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5M3.3 10l3.4.9-.9 3.4M20.7 14l-3.4-.9.9-3.4M5.8 9.7l.9 3.4-3.4.9M18.2 14.3l-.9-3.4 3.4-.9"/></svg>';
+
+  // Winter: forced in config, or no data for a week while it's Nov 1 – season start.
+  // Offline: no data for OFFLINE_HOURS. Winter takes priority.
+  function noDataKind(lastReading) {
+    if (config.forceWinterModal) return 'winter';
+    const now = nowChicago();
+    const ageMs = lastReading ? now - lastReading : Infinity;
+    const offSeason = now.getMonth() >= 10 || PRE_SEASON; // Nov, Dec, or before deployment
+    if (offSeason && ageMs > WINTER_DAYS * 86400000) return 'winter';
+    if (ageMs > OFFLINE_HOURS * 3600000) return 'offline';
+    return null;
+  }
+
+  function showNoDataModal(kind, lastReading) {
+    const isWinter = kind === 'winter';
+    const lastYear = lastReading ? lastReading.getFullYear() : VIEW_YEAR;
+    const overlay = document.createElement('div');
+    overlay.className = 'nodata-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'nodataTitle');
+    overlay.innerHTML = `
+      <div class="nodata-card${isWinter ? ' winter' : ''}">
+        <div class="nodata-icon">${isWinter ? ICON_WINTER : ICON_OFFLINE}</div>
+        <h2 class="nodata-title" id="nodataTitle">${isWinter
+          ? 'The buoy has been taken out for the winter!'
+          : 'It looks like the buoy is offline.'}</h2>
+        <p class="nodata-msg">${isWinter
+          ? 'Data collection will resume in the Spring.'
+          : 'This is usually resolved in a day or two. Please check again later!'}</p>
+        <p class="nodata-meta">${lastReading
+          ? `Last reading: ${d3.timeFormat('%b %-d, %Y, %-I:%M %p')(lastReading)}` : ''}</p>
+        <div class="nodata-actions">
+          <button type="button" class="nodata-btn">${isWinter
+            ? `Explore Data from ${lastYear}` : 'Explore Earlier Data'}</button>
+        </div>
+      </div>`;
+    const btn = overlay.querySelector('.nodata-btn');
+    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    btn.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+    btn.focus();
   }
 
   /* ---------- Binning ---------- */
@@ -446,14 +530,14 @@ function initBuoyApp(config) {
           const factor = initialPinchDist / currentDist;
           const span = startDomain[1] - startDomain[0];
           let newSpan = Math.max(span * factor, 1000 * 60 * 60 * 6);
-          newSpan = Math.min(newSpan, nowChicago() - EARLIEST);
+          newSpan = Math.min(newSpan, latestBound() - EARLIEST);
           const xBase = xScaleFor(width);
           const focalDate = xBase.invert(initialPinchCenter);
           const ratio = (focalDate - startDomain[0]) / span;
           let newStart = new Date(focalDate.getTime() - ratio * newSpan);
           let newEnd = new Date(focalDate.getTime() + (1 - ratio) * newSpan);
           if (newStart < EARLIEST) { newEnd = new Date(newEnd.getTime() + (EARLIEST - newStart)); newStart = new Date(EARLIEST); }
-          const maxEnd = nowChicago();
+          const maxEnd = latestBound();
           if (newEnd > maxEnd) { newStart = new Date(newStart.getTime() - (newEnd - maxEnd)); newEnd = maxEnd; }
           state.domain = [newStart, newEnd];
           updateAllCharts(); scheduleRender(); return;
@@ -470,7 +554,7 @@ function initBuoyApp(config) {
             let newEnd = new Date(startDomain[1].getTime() - dt);
             const span = startDomain[1] - startDomain[0];
             if (newStart < EARLIEST) { newStart = new Date(EARLIEST); newEnd = new Date(EARLIEST.getTime() + span); }
-            const maxEnd = nowChicago();
+            const maxEnd = latestBound();
             if (newEnd > maxEnd) { newEnd = maxEnd; newStart = new Date(maxEnd.getTime() - span); }
             state.domain = [newStart, newEnd];
             updateAllCharts(); scheduleRender(); return;
@@ -550,7 +634,7 @@ function initBuoyApp(config) {
             let newEnd = new Date(startDomain[1].getTime() - dt);
             const span = startDomain[1] - startDomain[0];
             if (newStart < EARLIEST) { newStart = new Date(EARLIEST); newEnd = new Date(EARLIEST.getTime() + span); }
-            const maxEnd = nowChicago();
+            const maxEnd = latestBound();
             if (newEnd > maxEnd) { newEnd = maxEnd; newStart = new Date(maxEnd.getTime() - span); }
             state.domain = [newStart, newEnd];
             updateAllCharts(); scheduleRender(); return;
@@ -1091,6 +1175,11 @@ function initBuoyApp(config) {
     const [start, end] = state.domain;
     document.getElementById('startDate').value = dateStr(start);
     document.getElementById('endDate').value = dateStr(end);
+    for (const id of ['startDate', 'endDate']) {
+      const el = document.getElementById(id);
+      el.min = dateStr(EARLIEST);
+      el.max = dateStr(latestBound());
+    }
 
     const records = await loadRange(start, end);
     if (token !== renderToken) return;
@@ -1137,7 +1226,7 @@ function initBuoyApp(config) {
 
   function setDomain(start, end, doRender) {
     if (start < EARLIEST) start = new Date(EARLIEST);
-    const maxEnd = nowChicago();
+    const maxEnd = latestBound();
     if (end > maxEnd) end = maxEnd;
     state.domain = [start, end];
     if (doRender) render();
@@ -1252,7 +1341,7 @@ function initBuoyApp(config) {
   document.querySelectorAll('.presets button').forEach(btn => {
     btn.addEventListener('click', () => {
       const days = btn.dataset.days;
-      const end = nowChicago();
+      const end = latestBound();
       const start = days === 'all' ? new Date(EARLIEST) : new Date(end.getTime() - days * 86400000);
       setDomain(start, end, true);
     });
@@ -1263,7 +1352,13 @@ function initBuoyApp(config) {
   /* ---------- Init ---------- */
 
   (async function init() {
-    const latest = await findLatestAvailable();
+    const lastReading = await findLatestAvailable();
+    const kind = noDataKind(lastReading);
+    if (kind) showNoDataModal(kind, lastReading);
+
+    // Open on the 3 days leading up to the most recent data
+    const latest = lastReading ? new Date(lastReading) : latestBound();
+    latest.setHours(23, 59, 59, 999);
     const start = new Date(latest.getTime() - 3 * 86400000);
     start.setHours(0, 0, 0, 0);
     setDomain(start, latest, true);

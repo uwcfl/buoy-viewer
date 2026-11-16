@@ -22,3 +22,14 @@ A web visualization tool for real-time and historical (current year) buoy data c
 └── assets/          # Logotype and buoy images
 ```
 
+
+## No-Data Modals
+
+On load, each page finds the most recent reading and may show a modal over the viewer:
+
+- **Buoy offline** — no data for `offlineHours` (default 24). Button: "Explore Earlier Data".
+- **Out for the winter** — no data for 7 days between Nov 1 and the season start, or
+  forced with `forceWinterModal: true` in the lake's config (`mendota.js`, `trout.js`,
+  `sparkling.js`). Button: "Explore Data from <year of last reading>".
+
+From Jan 1 until the season start (`earliest`), the viewer shows the previous year's season.
