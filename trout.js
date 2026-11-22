@@ -136,7 +136,8 @@ initBuoyApp({
   groups: TROUT_GROUPS,
   earliest: new Date(new Date().getFullYear(), 4, 1), // May 1
   forceWinterModal: false, // set true to always show the 'out for the winter' modal
-  offlineHours: 24, // hours without data before the 'buoy is offline' modal
+  offlineHours: 12, // hours without data before the 'buoy is offline' modal
+  waterTempRange: [6, 26], // default °C range (widens to fit data) for water temp profile lines + heatmap (~5th–99th pct, 2025–26)
   buoyImgSrc: null, // No buoy picture yet
   buoyCoords: null, // set [lat, lng] to enable Maps link on buoy image
   miniCardDepths: [0, 5, 10, 16, 25, 30], // 6 evenly-spaced depths including 0 and 30

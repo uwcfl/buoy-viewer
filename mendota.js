@@ -81,7 +81,8 @@ initBuoyApp({
   groups: MENDOTA_GROUPS,
   earliest: new Date(new Date().getFullYear(), 3, 1), // April 1
   forceWinterModal: false, // set true to always show the 'out for the winter' modal
-  offlineHours: 24, // hours without data before the 'buoy is offline' modal
+  offlineHours: 12, // hours without data before the 'buoy is offline' modal
+  waterTempRange: [7, 27], // default °C range (widens to fit data) for water temp profile lines + heatmap (~5th–99th pct, 2025–26)
   buoyImgSrc: 'assets/buoy.png',
   buoyCoords: [43.0995, -89.4045],
   miniCardDepths: [0, 5, 10, 15, 20],

@@ -14,7 +14,9 @@
  *   groups:          Array<{ key, label, kind, vkey?, unit? }>,
  *   earliest:        Date,             // season start; only its month/day are used
  *   forceWinterModal: boolean,         // true → always show the "out for the winter" modal
- *   offlineHours:    number,           // hours without data before the "offline" modal (default 24)
+ *   offlineHours:    number,           // hours without data before the "offline" modal (default 12)
+ *   waterTempRange:  [min, max],       // default °C range for the water temp profile (lines + heatmap);
+ *                                      // widened automatically if readings fall outside it
  *   buoyImgSrc:      string | null,    // null → hide buoy image
  *   buoyCoords:      [lat, lng] | null, // decimal coords → image links to Google Maps
  *   miniCardDepths:  number[],         // depths shown in "Current Conditions" card
@@ -128,6 +130,7 @@ function initBuoyApp(config) {
     visible: defaultVis,
     userToggled: new Set(),
     showCurrentConditions: true,
+    condUserToggled: false, // user clicked Show/Hide Current Conditions (overrides the auto default)
     depthOn: new Set(WT_KEYS),
     doUnit: 'sat',   // 'sat' | 'raw'
     windUnit: 'ms',    // 'ms' | 'mph'
@@ -237,30 +240,43 @@ function initBuoyApp(config) {
       }
       const results = await Promise.all(days.map(loadDay));
       for (const v of results) {
-        if (v !== 'missing' && v.length) {
-          return v.reduce((max, r) => (r.timestamp > max ? r.timestamp : max), v[0].timestamp);
+        if (v === 'missing' || !v.length) continue;
+        let newest = null;
+        for (const r of v) {
+          if (hasAnyValue(r) && (!newest || r.timestamp > newest)) newest = r.timestamp;
         }
+        if (newest) return newest;
       }
     }
     return null;
   }
 
+  // True if a record has a valid reading for any variable
+  function hasAnyValue(rec) {
+    for (const k in rec) {
+      if (k === 'timestamp') continue;
+      const v = rec[k];
+      if (v != null && !isNaN(v)) return true;
+    }
+    return false;
+  }
+
   /* ---------- No-Data Modals ---------- */
 
-  const OFFLINE_HOURS = config.offlineHours ?? 24;
-  const WINTER_DAYS = 7;
+  const OFFLINE_HOURS = config.offlineHours ?? 12;
+  const WINTER_HOURS = 24;
 
   const ICON_OFFLINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 4.2-2.6M9.5 5.2A15 15 0 0 1 22 8.8"/><path d="M5 12.6a10 10 0 0 1 3.4-1.9M13.5 10.3A10 10 0 0 1 19 12.6"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="0.8" fill="currentColor"/><path d="M3 3l18 18"/></svg>';
   const ICON_WINTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M4.2 6.5l15.6 9M4.2 17.5l15.6-9"/><path d="M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5M3.3 10l3.4.9-.9 3.4M20.7 14l-3.4-.9.9-3.4M5.8 9.7l.9 3.4-3.4.9M18.2 14.3l-.9-3.4 3.4-.9"/></svg>';
 
-  // Winter: forced in config, or no data for a week while it's Nov 1 – season start.
-  // Offline: no data for OFFLINE_HOURS. Winter takes priority.
+  // Winter: forced in config, or no data (in any variable) for WINTER_HOURS while
+  // it's Nov 1 – season start. Offline: no data for OFFLINE_HOURS. Winter takes priority.
   function noDataKind(lastReading) {
     if (config.forceWinterModal) return 'winter';
     const now = nowChicago();
     const ageMs = lastReading ? now - lastReading : Infinity;
     const offSeason = now.getMonth() >= 10 || PRE_SEASON; // Nov, Dec, or before deployment
-    if (offSeason && ageMs > WINTER_DAYS * 86400000) return 'winter';
+    if (offSeason && ageMs > WINTER_HOURS * 3600000) return 'winter';
     if (ageMs > OFFLINE_HOURS * 3600000) return 'offline';
     return null;
   }
@@ -361,19 +377,48 @@ function initBuoyApp(config) {
 
   function fmtDate(d) { return d3.timeFormat('%Y-%m-%d %H:%M')(d); }
 
+  // Current Conditions: a sensor silent for longer than this shows "–" (or its card is hidden)
+  const STALE_SENSOR_HOURS = 6;
+  // Current Conditions only shows data from this window
+  const CURRENT_CONDITIONS_HOURS = 12;
+  // While the buoy is reporting, a sensor with no data for this long has its chart hidden by default
+  const SENSOR_HIDE_HOURS = 24;
+
+  function staleCutoff() {
+    return new Date(nowChicago().getTime() - STALE_SENSOR_HOURS * 3600000);
+  }
+
+  // Latest value for `key`, or null if the sensor hasn't reported in STALE_SENSOR_HOURS
   function getLastValue(records, key) {
-    for (let i = records.length - 1; i >= 0; i--) {
+    const cutoff = staleCutoff();
+    for (let i = records.length - 1; i >= 0 && records[i].timestamp >= cutoff; i--) {
       if (records[i][key] != null && !isNaN(records[i][key])) return records[i][key];
     }
     return null;
   }
 
   function getLastDepthTemp(records, targetDepth) {
-    for (let i = records.length - 1; i >= 0; i--) {
+    const cutoff = staleCutoff();
+    for (let i = records.length - 1; i >= 0 && records[i].timestamp >= cutoff; i--) {
       const val = interpolateTempAtDepth(records[i], targetDepth);
       if (val != null) return val;
     }
     return null;
+  }
+
+  // Records from the last SENSOR_HIDE_HOURS (independent of the selected range,
+  // so Current Conditions stays current while browsing older data).
+  async function loadRecentRecords() {
+    const now = nowChicago();
+    const since = new Date(now.getTime() - SENSOR_HIDE_HOURS * 3600000);
+    const days = [new Date(since), new Date(now)];
+    if (dateStr(days[0]) === dateStr(days[1])) days.pop();
+    const results = await Promise.all(days.map(loadDay));
+    let recs = [];
+    for (const v of results) if (v !== 'missing') recs = recs.concat(v);
+    return recs
+      .filter(r => r.timestamp >= since && r.timestamp <= now && hasAnyValue(r))
+      .sort((a, b) => a.timestamp - b.timestamp);
   }
 
   // Max distance (m) a reading may be extended/interpolated away from a working
@@ -656,18 +701,24 @@ function initBuoyApp(config) {
 
   /* ---------- Mini Cards ---------- */
 
-  function renderMiniCards(records) {
+  function renderMiniCards(recent) {
+    const ccSince = new Date(nowChicago().getTime() - CURRENT_CONDITIONS_HOURS * 3600000);
+    const records = recent.filter(r => r.timestamp >= ccSince);
+    const fresh = records.filter(r => r.timestamp >= staleCutoff());
     const latestRec = records[records.length - 1];
-    if (!latestRec) return;
 
     const section = chartsEl.append('div').attr('class', 'mini-cards-section');
     const header = section.append('div').attr('class', 'mini-cards-header');
     header.append('div').attr('class', 'mini-cards-title').text('Current Conditions');
-    header.append('div').attr('class', 'mini-cards-timestamp').text(`As of ${fmtDate(latestRec.timestamp)}`);
+    header.append('div').attr('class', 'mini-cards-timestamp').text(latestRec
+      ? `As of ${fmtDate(latestRec.timestamp)}`
+      : `No data in the last ${CURRENT_CONDITIONS_HOURS} hours`);
     const grid = section.append('div').attr('class', 'mini-cards-grid');
 
     GROUPS.forEach(g => {
       if (!state.visible.has(g.key)) return;
+      // Hide cards for sensors with no data in STALE_SENSOR_HOURS
+      if (!hasGroupAnyData(g, fresh)) return;
       const card = grid.append('div').attr('class', 'mini-card');
 
       if (g.kind === 'profile') {
@@ -732,16 +783,57 @@ function initBuoyApp(config) {
         card.append('div').attr('class', 'mini-card-value').text(val != null ? `${val.toFixed(2)}${unitStr}` : '\u2013');
       }
     });
+
+    if (grid.selectAll('.mini-card').empty()) {
+      grid.append('div').attr('class', 'mini-cards-empty')
+        .style('color', 'var(--muted)').style('font-size', '0.85rem').style('padding', '6px 2px')
+        .text(`No sensors have reported in the last ${STALE_SENSOR_HOURS} hours.`);
+    }
   }
 
   /* ---------- Chart Renderers ---------- */
 
-  // Expand [lo, hi] symmetrically so it spans at least `span` units (water temp: 5 °C for lines, 10 °C for heatmap).
-  const MIN_WT_RANGE = 5;
-  function withMinRange(lo, hi, span = MIN_WT_RANGE) {
-    if (hi - lo >= span) return [lo, hi];
-    const mid = (lo + hi) / 2;
-    return [mid - span / 2, mid + span / 2];
+  // Default water temp range (°C) for the profile lines and heatmap, based on the
+  // lake's annual range so colors/axes are comparable across any time window.
+  // Readings outside it widen the range rather than being cut off.
+  const WATER_TEMP_RANGE = config.waterTempRange || [0, 30];
+  function waterTempDomain(binned, keys = WT_KEYS) {
+    let [lo, hi] = WATER_TEMP_RANGE;
+    for (const d of binned) {
+      for (const k of keys) {
+        const v = d[k];
+        if (v == null || isNaN(v)) continue;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+    }
+    return [lo, hi];
+  }
+
+  // Lines connect readings at most this far apart; longer gaps are left blank.
+  // Never smaller than one bin, so binned lines stay continuous.
+  const MAX_LINE_GAP_MS = 60 * 60000;
+  function maxGapMs() {
+    return Math.max(MAX_LINE_GAP_MS, (state.binMinutes || 0) * 60000);
+  }
+
+  // Build a line path for one series, breaking it wherever consecutive valid
+  // points are more than maxGapMs() apart (instead of drawing across the gap).
+  function gapLine(xScale, getV, yScale) {
+    const line = d3.line().defined(p => p != null).x(p => xScale(p.time)).y(p => yScale(p.v));
+    return (data) => {
+      const pts = [];
+      let prevT = null;
+      const gap = maxGapMs();
+      for (const d of data) {
+        const v = getV(d);
+        if (v == null || isNaN(v)) continue;
+        if (prevT != null && d.time - prevT > gap) pts.push(null);
+        pts.push({ time: d.time, v });
+        prevT = d.time;
+      }
+      return line(pts);
+    };
   }
 
   function renderSimple(group, records, binned) {
@@ -757,13 +849,13 @@ function initBuoyApp(config) {
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub').text(`${group.unit || ''}`.trim());
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
-    const line = d3.line().defined(d => d[group.vkey] != null).x(d => x(d.time)).y(d => y(d[group.vkey]));
+    const line = gapLine(x, d => d[group.vkey], y);
     plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', '#14708c').attr('d', line);
 
     div.node()._updateX = () => {
       const xNew = xScaleFor(width);
       svg.select('g.axis-bottom').call(d3.axisBottom(xNew).ticks(Math.min(8, width / 90)));
-      const l = d3.line().defined(d => d[group.vkey] != null).x(d => xNew(d.time)).y(d => y(d[group.vkey]));
+      const l = gapLine(xNew, d => d[group.vkey], y);
       plotArea.select('path.legend-line').attr('d', l);
     };
 
@@ -802,9 +894,7 @@ function initBuoyApp(config) {
     const { svg, width, clipId } = makeSvg(div, height);
     const x = xScaleFor(width);
     const activeKeys = WT_KEYS.filter(k => state.depthOn.has(k));
-    let allVals = [];
-    binned.forEach(d => activeKeys.forEach(k => { if (d[k] != null) allVals.push(d[k]); }));
-    const y = d3.scaleLinear().domain(allVals.length ? withMinRange(d3.min(allVals), d3.max(allVals)) : [0, 30]).nice()
+    const y = d3.scaleLinear().domain(waterTempDomain(binned, activeKeys)).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub')
@@ -816,7 +906,7 @@ function initBuoyApp(config) {
       const depth = DEPTHS[WT_KEYS.indexOf(k)];
       const c = color(depth);
       seriesInfo.push({ key: k, label: `${depth}m`, color: c });
-      const line = d3.line().defined(d => d[k] != null).x(d => x(d.time)).y(d => y(d[k]));
+      const line = gapLine(x, d => d[k], y);
       plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', c).attr('d', line);
     });
 
@@ -824,7 +914,7 @@ function initBuoyApp(config) {
       const xNew = xScaleFor(width);
       svg.select('g.axis-bottom').call(d3.axisBottom(xNew).ticks(Math.min(8, width / 90)));
       activeKeys.forEach((k, idx) => {
-        const l = d3.line().defined(d => d[k] != null).x(d => xNew(d.time)).y(d => y(d[k]));
+        const l = gapLine(xNew, d => d[k], y);
         plotArea.selectAll('path.legend-line').filter((_, i) => i === idx).attr('d', l);
       });
     };
@@ -834,9 +924,7 @@ function initBuoyApp(config) {
 
   function renderProfileHeatmap(div, group, records, binned) {
     const maxDepth = DEPTHS[DEPTHS.length - 1];
-    let allVals = [];
-    binned.forEach(d => WT_KEYS.forEach(k => { if (d[k] != null) allVals.push(d[k]); }));
-    const [minTemp, maxTemp] = allVals.length ? withMinRange(d3.min(allVals), d3.max(allVals), 10) : [0, 30];
+    const [minTemp, maxTemp] = waterTempDomain(binned);
 
     const legendDiv = div.append('div').attr('class', 'heatmap-legend')
       .style('display', 'flex').style('align-items', 'center').style('gap', '8px')
@@ -848,7 +936,7 @@ function initBuoyApp(config) {
 
     const height = 220;
     const wrapper = div.append('div').style('position', 'relative');
-    const colorScale = d3.scaleLinear().domain([minTemp, maxTemp]).range(['#14708c', '#d97a3c']).interpolate(d3.interpolateRgb);
+    const colorScale = d3.scaleLinear().domain([minTemp, maxTemp]).range(['#14708c', '#d97a3c']).interpolate(d3.interpolateRgb).clamp(true);
     const { svg, width } = makeSvg(wrapper, height);
     svg.style('position', 'relative').style('z-index', '1');
 
@@ -905,7 +993,10 @@ function initBuoyApp(config) {
         ctx.beginPath(); ctx.rect(MARGIN.left, MARGIN.top, plotWidth, plotHeight); ctx.clip();
         for (let i = 0; i < T; i++) {
           const x0 = xScale(binned[i].time);
-          let x1 = (i < T - 1) ? xScale(binned[i + 1].time) : x0 + (x0 - xScale(binned[Math.max(0, i - 1)].time));
+          // Stretch each column to the next bin, but not across gaps longer than maxGapMs()
+          const binEnd = new Date(binned[i].time.getTime() + (state.binMinutes || 5) * 60000);
+          let x1 = (i < T - 1 && binned[i + 1].time - binned[i].time <= maxGapMs())
+            ? xScale(binned[i + 1].time) : xScale(binEnd);
           if (x1 <= x0) x1 = x0 + 1;
           if (x1 < MARGIN.left || x0 > width - MARGIN.right) continue;
           const x0Floor = Math.floor(x0);
@@ -946,13 +1037,13 @@ function initBuoyApp(config) {
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub').text(unit);
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
-    const line = d3.line().defined(d => d[key] != null).x(d => x(d.time)).y(d => y(d[key]));
+    const line = gapLine(x, d => d[key], y);
     plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', '#14708c').attr('d', line);
 
     div.node()._updateX = () => {
       const xNew = xScaleFor(width);
       svg.select('g.axis-bottom').call(d3.axisBottom(xNew).ticks(Math.min(8, width / 90)));
-      const l = d3.line().defined(d => d[key] != null).x(d => xNew(d.time)).y(d => y(d[key]));
+      const l = gapLine(xNew, d => d[key], y);
       plotArea.select('path.legend-line').attr('d', l);
     };
 
@@ -978,7 +1069,7 @@ function initBuoyApp(config) {
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
     keys.forEach(s => {
-      const line = d3.line().defined(d => d[s.k] != null).x(d => x(d.time)).y(d => y(d[s.k]));
+      const line = gapLine(x, d => d[s.k], y);
       plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', s.color).attr('d', line);
     });
 
@@ -986,7 +1077,7 @@ function initBuoyApp(config) {
       const xNew = xScaleFor(width);
       svg.select('g.axis-bottom').call(d3.axisBottom(xNew).ticks(Math.min(8, width / 90)));
       keys.forEach((s, idx) => {
-        const l = d3.line().defined(d => d[s.k] != null).x(d => xNew(d.time)).y(d => y(d[s.k]));
+        const l = gapLine(xNew, d => d[s.k], y);
         plotArea.selectAll('path.legend-line').filter((_, i) => i === idx).attr('d', l);
       });
     };
@@ -1040,7 +1131,7 @@ function initBuoyApp(config) {
       .text(`${unit} \u2014 arrows show direction wind is blowing toward${spacingText}`);
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
-    const line = d3.line().defined(d => d.wsL != null).x(d => x(d.time)).y(d => y(d.wsL * speedMult));
+    const line = gapLine(x, d => (d.wsL != null ? d.wsL * speedMult : null), y);
     plotArea.append('path').datum(binned).attr('class', 'legend-line').attr('stroke', '#5c7680').attr('d', line);
     plotArea.selectAll('.wind-arrow').data(arrowPts).enter().append('path')
       .attr('class', 'wind-arrow').attr('d', 'M0,-7 L0,7 M0,-7 L-4,-2 M0,-7 L4,-2')
@@ -1050,7 +1141,7 @@ function initBuoyApp(config) {
     div.node()._updateX = () => {
       const xNew = xScaleFor(width);
       svg.select('g.axis-bottom').call(d3.axisBottom(xNew).ticks(Math.min(8, width / 90)));
-      const l = d3.line().defined(d => d.wsL != null).x(d => xNew(d.time)).y(d => y(d.wsL * speedMult));
+      const l = gapLine(xNew, d => (d.wsL != null ? d.wsL * speedMult : null), y);
       plotArea.select('path.legend-line').attr('d', l);
       plotArea.selectAll('.wind-arrow').attr('transform', d => `translate(${xNew(d.time)},${y(d.wsL)}) rotate(${(d.wdL + 180) % 360})`);
     };
@@ -1073,6 +1164,17 @@ function initBuoyApp(config) {
 
   function hasValidValue(v) {
     return v != null && !isNaN(v) && v !== 0 && v !== -99;
+  }
+
+  // Like hasGroupValidData, but any reading counts (including 0, e.g. PAR at night)
+  function hasGroupAnyData(g, records) {
+    const ok = v => v != null && !isNaN(v) && v !== -99;
+    if (g.kind === 'simple') return records.some(r => ok(r[g.vkey]));
+    if (g.kind === 'do') return records.some(r => ok(r.do_raw) || ok(r.do_sat));
+    if (g.kind === 'par') return records.some(r => ok(r.PAR_above_Avg) || ok(r.PAR_below_Avg) || ok(r.par));
+    if (g.kind === 'wind') return records.some(r => ok(r.wsL) || ok(r.wdL));
+    if (g.kind === 'profile') return records.some(r => WT_KEYS.some(k => ok(r[k])));
+    return false;
   }
 
   function hasGroupValidData(g, records) {
@@ -1147,7 +1249,11 @@ function initBuoyApp(config) {
     toggleCondBtn.textContent = state.showCurrentConditions ? 'Hide Current Conditions' : 'Show Current Conditions';
     toggleCondBtn.style.fontWeight = 'bold';
     toggleCondBtn.classList.toggle('active', state.showCurrentConditions);
-    toggleCondBtn.addEventListener('click', () => { state.showCurrentConditions = !state.showCurrentConditions; render(); });
+    toggleCondBtn.addEventListener('click', () => {
+      state.showCurrentConditions = !state.showCurrentConditions;
+      state.condUserToggled = true;
+      render();
+    });
     wrap.appendChild(toggleCondBtn);
   }
 
@@ -1181,8 +1287,22 @@ function initBuoyApp(config) {
       el.max = dateStr(latestBound());
     }
 
-    const records = await loadRange(start, end);
+    const [records, recent] = await Promise.all([loadRange(start, end), loadRecentRecords()]);
     if (token !== renderToken) return;
+
+    // Is the buoy quiet (offline/winter modal conditions)?
+    const lastRecent = recent.length ? recent[recent.length - 1].timestamp : null;
+    const buoyQuiet = noDataKind(lastRecent) != null;
+
+    // Modal conditions: hide Current Conditions, keep the usual chart defaults.
+    // Otherwise: show Current Conditions and hide charts for sensors that have
+    // gone silent for SENSOR_HIDE_HOURS (unless the user toggled them).
+    if (!state.condUserToggled) state.showCurrentConditions = !buoyQuiet;
+    if (!buoyQuiet) {
+      GROUPS.forEach(g => {
+        if (!state.userToggled.has(g.key) && !hasGroupAnyData(g, recent)) state.visible.delete(g.key);
+      });
+    }
 
     // Auto-untoggle any groups with no valid data (all NA / -99 / 0), unless explicitly toggled by user
     if (records.length > 0) {
@@ -1197,6 +1317,7 @@ function initBuoyApp(config) {
 
     const spanDays = (end - start) / 86400000;
     const mins = binMinutesFor(spanDays);
+    state.binMinutes = mins;
     document.getElementById('binNote').textContent = `Showing ${binLabel(mins)}`;
 
     const binned = binRecords(records, mins, new Set(['wdL']));
@@ -1209,7 +1330,7 @@ function initBuoyApp(config) {
 
     chartsEl.html('');
 
-    if (state.showCurrentConditions && records.length > 0) renderMiniCards(records);
+    if (state.showCurrentConditions) renderMiniCards(recent);
 
     GROUPS.forEach(g => {
       if (!state.visible.has(g.key)) return;
