@@ -134,6 +134,7 @@ function initBuoyApp(config) {
     depthOn: new Set(WT_KEYS),
     doUnit: 'sat',   // 'sat' | 'raw'
     windUnit: 'ms',    // 'ms' | 'mph'
+    tempUnit: 'C',     // 'C' | 'F' (all temperature variables)
     wtProfileMode: 'heatmap', // 'lines' | 'heatmap'
     cache: new Map(), // dateStr → records[] | 'missing' | Promise
     droppedDays: new Set(), // dateStr of days after a 3+ day gap
@@ -229,13 +230,15 @@ function initBuoyApp(config) {
 
   /* ---------- Flatline Masking ----------
    * When a sensor (e.g. the YSI sonde) stops, the logger can keep writing its
-   * last value. Treat a non-zero value repeated unchanged for FLATLINE_HOURS or
-   * more as missing (keeping the first reading of the run). Water temp profile
-   * thermistors are exempt: at their resolution they legitimately hold one value
-   * for 10+ hours. Zeros are exempt (PAR at night, no precipitation).
+   * last value. Treat any value (including 0) repeated unchanged for
+   * FLATLINE_HOURS or more as missing (keeping the first reading of the run).
+   * Water temp profile thermistors are exempt: at their resolution they
+   * legitimately hold one value for 10+ hours. Zeros are kept for variables in
+   * FLATLINE_ZERO_OK (PAR is 0 all night; no precipitation for days is real).
    */
   const FLATLINE_HOURS = 3;
   const FLATLINE_EXEMPT = new Set(WT_KEYS);
+  const FLATLINE_ZERO_OK = new Set(['precip_mm', 'par', 'PAR_above_Avg', 'PAR_below_Avg']); // PAR reads 0 all night
 
   function maskFlatlines(records) {
     if (records.length < 2) return records;
@@ -252,7 +255,7 @@ function initBuoyApp(config) {
         if (same) continue;
         const v = out[runStart][k];
         const endIdx = i - 1;
-        if (v != null && v !== 0 && endIdx > runStart &&
+        if (v != null && !(v === 0 && FLATLINE_ZERO_OK.has(k)) && endIdx > runStart &&
             out[endIdx].timestamp - out[runStart].timestamp >= minMs) {
           for (let j = runStart + 1; j <= endIdx; j++) {
             if (!copied.has(j)) { out[j] = { ...out[j] }; copied.add(j); }
@@ -687,7 +690,7 @@ function initBuoyApp(config) {
       const temp = interpolateTempAtDepth(d, targetDepth);
       vLine.attr('x1', x(d.time)).attr('x2', x(d.time)).style('display', null);
       hLine.attr('y1', pointerY).attr('y2', pointerY).style('display', null);
-      const html = `<b>${fmtDate(d.time)}</b><br>Depth: ${targetDepth.toFixed(1)} m<br>Temp: ${temp != null ? temp.toFixed(2) + ' \u00b0C' : '\u2013'}`;
+      const html = `<b>${fmtDate(d.time)}</b><br>Depth: ${targetDepth.toFixed(1)} m<br>Temp: ${temp != null ? temp.toFixed(2) + ' ' + tUnit() : '\u2013'}`;
       tooltip.style('display', null).html(html);
       const tw = tooltip.node().offsetWidth;
       const lp = pageX > window.innerWidth * (2 / 3) ? pageX - tw - 12 : pageX + 12;
@@ -761,13 +764,15 @@ function initBuoyApp(config) {
       const card = grid.append('div').attr('class', 'mini-card');
 
       if (g.kind === 'profile') {
-        card.append('div').attr('class', 'mini-card-title').append('span').text(g.label);
+        const titleRow = card.append('div').attr('class', 'mini-card-title');
+        titleRow.append('span').text(g.label);
+        addTempToggle(titleRow);
         const subGrid = card.append('div').attr('class', 'mini-card-grid-values');
         MINI_CARD_DEPTHS.forEach(depth => {
           const temp = getLastDepthTemp(records, depth);
           const item = subGrid.append('div').attr('class', 'mini-card-grid-item');
           item.append('span').attr('class', 'mini-card-grid-label').text(`${depth}m`);
-          item.append('span').attr('class', 'mini-card-grid-val').text(temp != null ? `${temp.toFixed(1)}\u00b0C` : '\u2013');
+          item.append('span').attr('class', 'mini-card-grid-val').text(temp != null ? `${temp.toFixed(1)}${tUnit()}` : '\u2013');
         });
       } else if (g.kind === 'do') {
         const titleRow = card.append('div').attr('class', 'mini-card-title');
@@ -816,9 +821,11 @@ function initBuoyApp(config) {
           iDir.append('span').attr('class', 'mini-card-grid-val').text('\u2013');
         }
       } else if (g.kind === 'simple') {
-        card.append('div').attr('class', 'mini-card-title').append('span').text(g.label);
+        const titleRow = card.append('div').attr('class', 'mini-card-title');
+        titleRow.append('span').text(g.label);
+        if (isTempGroup(g)) addTempToggle(titleRow);
         const val = getLastValue(records, g.vkey);
-        const unitStr = g.unit ? ` ${g.unit}` : '';
+        const unitStr = g.unit ? ` ${dispUnit(g.unit)}` : '';
         card.append('div').attr('class', 'mini-card-value').text(val != null ? `${val.toFixed(2)}${unitStr}` : '\u2013');
       }
     });
@@ -830,6 +837,38 @@ function initBuoyApp(config) {
     }
   }
 
+  /* ---------- Temperature Units ---------- */
+
+  const DEG_C = '\u00b0C';
+  const TEMP_KEYS = new Set([
+    ...WT_KEYS,
+    ...GROUPS.filter(g => g.kind === 'simple' && g.unit === DEG_C).map(g => g.vkey),
+  ]);
+  const isF = () => state.tempUnit === 'F';
+  const cToF = c => c * 9 / 5 + 32;
+  function tUnit() { return isF() ? '\u00b0F' : DEG_C; }
+  function dispUnit(u) { return u === DEG_C ? tUnit() : u; }
+  function isTempGroup(g) { return g.kind === 'profile' || (g.kind === 'simple' && g.unit === DEG_C); }
+
+  // Copy of records with temperature variables converted to the display unit
+  function toDisplayTemps(recs) {
+    if (!isF()) return recs;
+    return recs.map(r => {
+      const o = { ...r };
+      for (const k of TEMP_KEYS) if (o[k] != null) o[k] = cToF(o[k]);
+      return o;
+    });
+  }
+
+  // °C / °F buttons (one setting shared by every temperature variable)
+  function addTempToggle(container) {
+    const ut = container.append('div').attr('class', 'unit-toggle');
+    ['C', 'F'].forEach(u => {
+      ut.append('button').text(`\u00b0${u}`).classed('active', state.tempUnit === u)
+        .on('click', (e) => { e.stopPropagation(); state.tempUnit = u; render(); });
+    });
+  }
+
   /* ---------- Chart Renderers ---------- */
 
   // Default water temp range (°C) for the profile lines and heatmap, based on the
@@ -837,7 +876,7 @@ function initBuoyApp(config) {
   // Readings outside it widen the range rather than being cut off.
   const WATER_TEMP_RANGE = config.waterTempRange || [0, 30];
   function waterTempDomain(binned, keys = WT_KEYS) {
-    let [lo, hi] = WATER_TEMP_RANGE;
+    let [lo, hi] = isF() ? WATER_TEMP_RANGE.map(cToF) : WATER_TEMP_RANGE;
     for (const d of binned) {
       for (const k of keys) {
         const v = d[k];
@@ -885,7 +924,8 @@ function initBuoyApp(config) {
       .domain(vals.length ? [d3.min(vals), d3.max(vals)] : [0, 1]).nice()
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
-    div.select('.chart-title-group').append('div').attr('class', 'chart-sub').text(`${group.unit || ''}`.trim());
+    div.select('.chart-title-group').append('div').attr('class', 'chart-sub').text(`${dispUnit(group.unit || '')}`.trim());
+    if (isTempGroup(group)) addTempToggle(div.select('.chart-title-row'));
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
     const line = gapLine(x, d => d[group.vkey], y);
@@ -904,7 +944,9 @@ function initBuoyApp(config) {
   function renderProfile(group, records, binned) {
     const div = panel(group);
     const top = div.select('.chart-title-row');
-    const ut = top.append('div').attr('class', 'unit-toggle');
+    const controls = top.append('div').style('display', 'flex').style('gap', '10px');
+    addTempToggle(controls);
+    const ut = controls.append('div').attr('class', 'unit-toggle');
     [{ id: 'lines', label: 'Lines' }, { id: 'heatmap', label: 'Heatmap' }].forEach(m => {
       ut.append('button').text(m.label).classed('active', state.wtProfileMode === m.id)
         .on('click', () => { state.wtProfileMode = m.id; render(); });
@@ -937,7 +979,7 @@ function initBuoyApp(config) {
       .range([height - MARGIN.bottom, MARGIN.top]);
     drawAxes(svg, x, y, width, height);
     div.select('.chart-title-group').append('div').attr('class', 'chart-sub')
-      .text('\u00b0C \u2014 color = depth (light blue = shallow, deep blue = deep)');
+      .text(`${tUnit()} \u2014 color = depth (light blue = shallow, deep blue = deep)`);
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
     const seriesInfo = [];
@@ -968,10 +1010,10 @@ function initBuoyApp(config) {
     const legendDiv = div.append('div').attr('class', 'heatmap-legend')
       .style('display', 'flex').style('align-items', 'center').style('gap', '8px')
       .style('margin', '4px 0 6px').style('font-size', '0.72rem').style('color', 'var(--muted)');
-    legendDiv.append('span').text(`${minTemp.toFixed(1)}\u00b0C`);
+    legendDiv.append('span').text(`${minTemp.toFixed(1)}${tUnit()}`);
     legendDiv.append('div').style('height', '10px').style('width', '140px').style('border-radius', '3px')
       .style('background', 'linear-gradient(to right, #14708c, #d97a3c)');
-    legendDiv.append('span').text(`${maxTemp.toFixed(1)}\u00b0C`);
+    legendDiv.append('span').text(`${maxTemp.toFixed(1)}${tUnit()}`);
 
     const height = 220;
     const wrapper = div.append('div').style('position', 'relative');
@@ -1359,7 +1401,10 @@ function initBuoyApp(config) {
     state.binMinutes = mins;
     document.getElementById('binNote').textContent = `Showing ${binLabel(mins)}`;
 
-    const binned = binRecords(records, mins, new Set(['wdL']));
+    const binnedRaw = binRecords(records, mins, new Set(['wdL']));
+    // Convert temperatures to the selected unit for display (bins are linear averages)
+    const binned = toDisplayTemps(binnedRaw);
+    const recordsD = toDisplayTemps(records);
 
     buildToggles();
 
@@ -1369,15 +1414,15 @@ function initBuoyApp(config) {
 
     chartsEl.html('');
 
-    if (state.showCurrentConditions) renderMiniCards(recent);
+    if (state.showCurrentConditions) renderMiniCards(toDisplayTemps(recent));
 
     GROUPS.forEach(g => {
       if (!state.visible.has(g.key)) return;
-      if (g.kind === 'simple') renderSimple(g, records, binned);
-      else if (g.kind === 'profile') renderProfile(g, records, binned);
-      else if (g.kind === 'do') renderDO(g, records, binned);
-      else if (g.kind === 'par') renderPAR(g, records, binned);
-      else if (g.kind === 'wind') renderWind(g, records, binned, mins);
+      if (g.kind === 'simple') renderSimple(g, recordsD, binned);
+      else if (g.kind === 'profile') renderProfile(g, recordsD, binned);
+      else if (g.kind === 'do') renderDO(g, recordsD, binned);
+      else if (g.kind === 'par') renderPAR(g, recordsD, binned);
+      else if (g.kind === 'wind') renderWind(g, recordsD, binned, mins);
     });
 
     window.scrollTo(0, savedScrollY);
