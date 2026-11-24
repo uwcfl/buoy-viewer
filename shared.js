@@ -15,6 +15,8 @@
  *   earliest:        Date,             // season start; only its month/day are used
  *   forceWinterModal: boolean,         // true → always show the "out for the winter" modal
  *   offlineHours:    number,           // hours without data before the "offline" modal (default 12)
+ *   dataLagHours:    number,           // normal delay before data reaches the server (default 0);
+ *                                      // added to every "no data for N hours" threshold
  *   waterTempRange:  [min, max],       // default °C range for the water temp profile (lines + heatmap);
  *                                      // widened automatically if readings fall outside it
  *   buoyImgSrc:      string | null,    // null → hide buoy image
@@ -304,8 +306,11 @@ function initBuoyApp(config) {
 
   /* ---------- No-Data Modals ---------- */
 
-  const OFFLINE_HOURS = config.offlineHours ?? 12;
-  const WINTER_HOURS = 24;
+  // Some buoys (Trout, Sparkling) upload in a once-a-day batch, so their newest
+  // reading is normally up to a day old. Every staleness threshold adds this lag.
+  const DATA_LAG_HOURS = config.dataLagHours ?? 0;
+  const OFFLINE_HOURS = (config.offlineHours ?? 12) + DATA_LAG_HOURS;
+  const WINTER_HOURS = 24 + DATA_LAG_HOURS;
 
   const ICON_OFFLINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8.8a15 15 0 0 1 4.2-2.6M9.5 5.2A15 15 0 0 1 22 8.8"/><path d="M5 12.6a10 10 0 0 1 3.4-1.9M13.5 10.3A10 10 0 0 1 19 12.6"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><circle cx="12" cy="20" r="0.8" fill="currentColor"/><path d="M3 3l18 18"/></svg>';
   const ICON_WINTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 2v20M4.2 6.5l15.6 9M4.2 17.5l15.6-9"/><path d="M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5M3.3 10l3.4.9-.9 3.4M20.7 14l-3.4-.9.9-3.4M5.8 9.7l.9 3.4-3.4.9M18.2 14.3l-.9-3.4 3.4-.9"/></svg>';
@@ -419,11 +424,11 @@ function initBuoyApp(config) {
   function fmtDate(d) { return d3.timeFormat('%Y-%m-%d %H:%M')(d); }
 
   // Current Conditions: a sensor silent for longer than this shows "–" (or its card is hidden)
-  const STALE_SENSOR_HOURS = 6;
+  const STALE_SENSOR_HOURS = 6 + DATA_LAG_HOURS;
   // Current Conditions only shows data from this window
-  const CURRENT_CONDITIONS_HOURS = 12;
+  const CURRENT_CONDITIONS_HOURS = 12 + DATA_LAG_HOURS;
   // While the buoy is reporting, a sensor with no data for this long has its chart hidden by default
-  const SENSOR_HIDE_HOURS = 24;
+  const SENSOR_HIDE_HOURS = 24 + DATA_LAG_HOURS;
 
   function staleCutoff() {
     return new Date(nowChicago().getTime() - STALE_SENSOR_HOURS * 3600000);
@@ -452,8 +457,10 @@ function initBuoyApp(config) {
   async function loadRecentRecords() {
     const now = nowChicago();
     const since = new Date(now.getTime() - SENSOR_HIDE_HOURS * 3600000);
-    const days = [new Date(since), new Date(now)];
-    if (dateStr(days[0]) === dateStr(days[1])) days.pop();
+    const days = [];
+    for (let d = new Date(since.getFullYear(), since.getMonth(), since.getDate()); d <= now; d.setDate(d.getDate() + 1)) {
+      days.push(new Date(d));
+    }
     const results = await Promise.all(days.map(loadDay));
     let recs = [];
     for (const v of results) if (v !== 'missing') recs = recs.concat(v);
